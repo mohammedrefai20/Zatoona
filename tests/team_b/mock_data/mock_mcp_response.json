@@ -1,0 +1,53 @@
+{
+  "session_id": "test-session-001",
+  "chunks": [
+    {
+      "chunk_id": "chunk-001",
+      "topic": "ai",
+      "content": "Artificial Intelligence (AI) refers to the simulation of human intelligence processes by machines, especially computer systems. These processes include learning, reasoning, and self-correction.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-002",
+      "topic": "ai",
+      "content": "Machine Learning (ML) is a subset of AI that provides systems the ability to automatically learn and improve from experience without being explicitly programmed. It focuses on the development of algorithms that analyze data.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-003",
+      "topic": "ai",
+      "content": "Deep Learning is a specialized branch of Machine Learning based on Artificial Neural Networks with multiple layers. It is inspired by the structure and function of the human brain's neural networks.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-004",
+      "topic": "python",
+      "content": "Python is a high-level, interpreted programming language known for its readability and clean syntax. It supports multiple programming paradigms, including object-oriented, imperative, and functional programming.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-005",
+      "topic": "python",
+      "content": "A Python decorator is a design pattern that allows a user to add new functionality to an existing object (like functions or classes) without modifying its structure. Decorators are typically applied using the '@' symbol.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-006",
+      "topic": "python",
+      "content": "Python generators are functions that return an iterator using the 'yield' keyword. Unlike regular functions that return a value and terminate, generators pause execution and yield values one at a time, saving memory.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-007",
+      "topic": "ai",
+      "content": "Natural Language Processing (NLP) is a field of artificial intelligence that enables computers to understand, interpret, and generate human languages. Applications include translation, sentiment analysis, and chatbots.",
+      "session_id": "test-session-001"
+    },
+    {
+      "chunk_id": "chunk-008",
+      "topic": "python",
+      "content": "Python lists are mutable ordered sequences of elements. They are defined using square brackets `[]` and can contain items of different data types, supporting operations like append, extend, and slice.",
+      "session_id": "test-session-001"
+    }
+  ]
+}

@@ -1,342 +1,118 @@
-# Classroom Exam Agent — Project Structure
+# Team B — Classroom Exam Creator Agent
+
+This repository contains **Team B's Exam Creator Agent** system. It uses **LangGraph** to coordinate a structured, self-correcting agentic pipeline that fetches note chunks, drafts exam questions, validates them, and automatically self-corrects any invalid questions.
 
 ---
 
-## Root Structure
+## Workflow Diagram
+
+The pipeline structure is visualized below. You can also view the high-resolution image at [exam generator and validator flow.png](file:///c:/Users/mazen/Desktop/Leo-Agent/Leo-Agent/exam%20generator%20and%20validator%20flow.png).
+
+```mermaid
+graph TD
+    Entry((Start)) --> fetch_chunks[fetch_chunks Node]
+    fetch_chunks --> generate[generate Node]
+    generate --> validate[validate Node]
+    validate --> route{route_after_validate Edge}
+    route -- Approved --> End((End))
+    route -- Rejected & Iterations < Max --> generate
+    route -- Rejected & Max Iterations Reached --> End
+```
+
+---
+
+## Project Structure
 
 ```
-classroom-exam-agent/
+Leo-Agent/
 │
-├── .env                        # all API keys and config (never commit this)
-├── .env.example                # template showing required env variables
-├── .gitignore                  # ignore .env, __pycache__, chroma_db/, etc.
-├── requirements.txt            # all python dependencies
-├── README.md                   # project overview and setup instructions
-├── main.py                     # entry point — starts the full pipeline
+├── .env                        # Local API configuration
+├── .env.example                # Configuration template
+├── requirements.txt            # Python dependencies
+├── README.md                   # Project overview & running instructions
+├── main.py                     # Main CLI entry point
+├── exam generator and validator flow.png  # Rendered LangGraph visualization
 │
 ├── config/
-│   └── settings.py             # loads .env and exposes config constants
+│   └── settings.py             # Config loader (Ollama URL, model configuration)
 │
-├── mcp_server/                 # TEAM A
-├── vector_db/                  # TEAM A
-├── agents/                     # TEAM B + TEAM C
-├── graph/                      # TEAM B
-├── ui/                         # TEAM C
-├── schemas/                    # SHARED — all teams
-└── tests/                      # SHARED — all teams
-```
-
----
-
-## Team A — Infrastructure
-
-```
-mcp_server/
+├── agents/
+│   ├── __init__.py
+│   ├── generator_agent.py      # Generator Agent (drafts exam questions)
+│   └── validator_agent.py      # Validator Agent (grounds questions against notes)
 │
-├── __init__.py
-├── server.py                   # MCP server setup and startup
-└── tools/
-    ├── __init__.py
-    └── retrieval_tool.py       # get_relevant_chunks(topic) tool definition
-
-vector_db/
+├── graph/
+│   ├── __init__.py
+│   ├── exam_graph.py           # LangGraph state machine graph compilation
+│   ├── nodes.py                # Graph nodes (fetch, generate, validate)
+│   ├── edges.py                # Conditional routing logic
+│   └── state.py                # Shared ExamState TypedDict definition
 │
-├── __init__.py
-├── chroma_client.py            # ChromaDB connection and collection setup
-├── embedder.py                 # converts text chunks into vector embeddings
-├── ingestion.py                # takes raw notes → chunks → embeds → stores
-└── retriever.py                # semantic search logic used by retrieval_tool
-```
-
----
-
-## Team B — Exam Creation
-
-```
-agents/
+├── schemas/
+│   ├── __init__.py
+│   ├── note_chunk.py           # Shared NoteChunk structure
+│   └── exam_object.py          # Shared ExamObject & Question structures
 │
-├── __init__.py
-├── generator_agent.py          # Agent 1 — generates exam from note chunks
-└── validator_agent.py          # Agent 2 — validates questions against notes
-
-graph/
-│
-├── __init__.py
-├── exam_graph.py               # LangGraph state machine definition
-├── nodes.py                    # each graph node (generate, validate, route)
-├── edges.py                    # conditional edges (approve vs reject routing)
-└── state.py                    # ExamState definition — shared graph state
-```
-
----
-
-## Team C — Grading and Feedback
-
-```
-agents/
-│
-├── corrector_agent.py          # Agent 3 — grades answers, pulls chunks, gives feedback
-
-ui/
-│
-├── __init__.py
-├── app.py                      # main UI entry point (Streamlit or CLI)
-├── pages/
-│   ├── upload_page.py          # student uploads notes and topics
-│   ├── exam_page.py            # student sees exam and submits answers
-│   └── feedback_page.py        # student sees feedback report
-└── components/
-    ├── question_card.py        # renders a single question
-    └── feedback_card.py        # renders per-question feedback result
-```
-
----
-
-## Shared — Schemas
-
-```
-schemas/
-│
-├── __init__.py
-├── note_chunk.py               # NoteChunk schema
-├── exam_object.py              # ExamObject + Question schema
-└── feedback_report.py          # FeedbackReport + QuestionResult schema
-```
-
-### Schema definitions
-
-```python
-# schemas/note_chunk.py
-class NoteChunk:
-    chunk_id   : str
-    topic      : str
-    content    : str
-    session_id : str
-
-# schemas/exam_object.py
-class Question:
-    question_id      : str
-    topic            : str
-    question         : str
-    correct_answer   : str
-    source_chunk_id  : str
-
-class ExamObject:
-    session_id : str
-    topics     : list[str]
-    status     : str          # draft | validated
-    questions  : list[Question]
-
-# schemas/feedback_report.py
-class QuestionResult:
-    question_id    : str
-    question       : str
-    student_answer : str
-    is_correct     : bool
-    explanation    : str
-    source_chunk   : str
-
-class FeedbackReport:
-    session_id        : str
-    score             : int
-    topics_to_review  : list[str]
-    encouragement     : str
-    results           : list[QuestionResult]
-```
-
----
-
-## Shared — Tests
-
-```
-tests/
-│
-├── __init__.py
-│
-├── team_a/
-│   ├── test_ingestion.py       # test note chunking and embedding
-│   ├── test_retriever.py       # test chunk retrieval by topic
-│   └── test_mcp_server.py      # test MCP tool response
-│
-├── team_b/
-│   ├── test_generator_agent.py # test exam generation with mock chunks
-│   ├── test_validator_agent.py # test validation logic (approve + reject)
-│   └── test_exam_graph.py      # test full LangGraph loop
-│
-└── team_c/
-    ├── test_corrector_agent.py # test grading logic and feedback generation
-    └── mock_data/
-        ├── mock_exam_object.json    # fake exam for testing without Team B
-        └── mock_mcp_response.json   # fake MCP chunks for testing without Team A
-```
-
----
-
-## Environment Variables
-
-```
-# .env.example
-
-# LLM
-OPENAI_API_KEY=your_openai_key_here
-MODEL_NAME=gpt-4o
-
-# ChromaDB
-CHROMA_PERSIST_DIR=./chroma_db
-CHROMA_COLLECTION_NAME=student_notes
-
-# MCP Server
-MCP_SERVER_HOST=localhost
-MCP_SERVER_PORT=8000
-
-# Session
-SESSION_RESET_ON_START=true
-
-# UI
-UI_PORT=8501
-```
-
----
-
-## Requirements
-
-```
-# requirements.txt
-
-# LLM and agents
-langchain
-langchain-openai
-langchain-community
-langgraph
-openai
-
-# MCP
-mcp
-
-# Vector DB
-chromadb
-
-# Embeddings
-sentence-transformers
-
-# UI
-streamlit
-
-# Schemas and validation
-pydantic
-
-# Environment
-python-dotenv
-
-# Testing
-pytest
-```
-
----
-
-## Config
-
-```python
-# config/settings.py
-
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY")
-MODEL_NAME           = os.getenv("MODEL_NAME", "gpt-4o")
-CHROMA_PERSIST_DIR   = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-CHROMA_COLLECTION    = os.getenv("CHROMA_COLLECTION_NAME", "student_notes")
-MCP_HOST             = os.getenv("MCP_SERVER_HOST", "localhost")
-MCP_PORT             = int(os.getenv("MCP_SERVER_PORT", 8000))
-SESSION_RESET        = os.getenv("SESSION_RESET_ON_START", "true") == "true"
-UI_PORT              = int(os.getenv("UI_PORT", 8501))
-```
-
----
-
-## Main Entry Point
-
-```python
-# main.py
-
-from config.settings import MCP_HOST, MCP_PORT
-from mcp_server.server import start_mcp_server
-from graph.exam_graph import run_exam_pipeline
-from ui.app import start_ui
-
-if __name__ == "__main__":
-    start_mcp_server(host=MCP_HOST, port=MCP_PORT)
-    start_ui()
-```
-
----
-
-## File Ownership by Team
-
-```
-TEAM A owns:
-  mcp_server/
-  vector_db/
-  tests/team_a/
-
-TEAM B owns:
-  agents/generator_agent.py
-  agents/validator_agent.py
-  graph/
-  tests/team_b/
-
-TEAM C owns:
-  agents/corrector_agent.py
-  ui/
-  tests/team_c/
-  tests/team_c/mock_data/
-
-ALL TEAMS own:
-  schemas/           ← agree on this first before writing anything
-  requirements.txt   ← each team adds their dependencies
-  .env.example       ← each team adds their required variables
-  README.md          ← each team documents their module
+└── tests/
+    └── team_b/
+        ├── conftest.py         # Mock data fixtures
+        ├── test_exam_graph.py  # Graph execution & iteration tests
+        ├── test_generator_agent.py
+        ├── test_validator_agent.py
+        └── mock_data/
+            └── mock_mcp_response.json  # Mock database chunks about AI & Python
 ```
 
 ---
 
 ## Setup Instructions
 
+### 1. Prerequisites
+- **Ollama**: Make sure Ollama is installed and running on your system (`http://localhost:11434`).
+- Pull the Qwen 2.5 7B model:
+  ```bash
+  ollama pull qwen2.5:7b
+  ```
+
+### 2. Configure Environment
+1. Initialize the environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Adjust variables in `.env` if necessary. By default, it is configured for Ollama:
+   ```env
+   MODEL_NAME=qwen2.5:7b
+   OLLAMA_BASE_URL=http://localhost:11434
+   MAX_VALIDATION_ITERATIONS=3
+   ```
+
+### 3. Install Dependencies
+Using **uv**:
+```bash
+uv sync
 ```
-# 1. clone the repo
-git clone https://github.com/your-team/classroom-exam-agent
-cd classroom-exam-agent
+*(Alternatively, using pip: `pip install -r requirements.txt`)*
 
-# 2. create virtual environment
-python -m venv venv
-source venv/bin/activate        # mac / linux
-venv\Scripts\activate           # windows
+---
 
-# 3. install dependencies
-pip install -r requirements.txt
+## Running the Application
 
-# 4. set up environment variables
-cp .env.example .env
-# open .env and fill in your API keys
+### 1. Run the Exam Creator Pipeline
+Execute the main entry point by specifying a session ID and target topics:
+```bash
+uv run python main.py --session test-session-001 --topics ai,python
+```
 
-# 5. run the project
-python main.py
+### 2. Run Unit Tests
+To execute Team B's test suite:
+```bash
+uv run pytest
 ```
 
 ---
 
-## Git Branch Strategy
+## Core Components & Self-Correction
 
-```
-main              ← stable, working code only
-  │
-  ├── team-a      ← Team A working branch
-  ├── team-b      ← Team B working branch
-  └── team-c      ← Team C working branch (your branch)
-
-Rule: never push directly to main
-      open a pull request and get one review before merging
-```
-
+* **Generator Agent**: Receives notes chunks matching the session and topics. It generates structured exam questions containing a question ID, topic, question, answer, and source chunk reference.
+* **Validator Agent**: Automatically validates every generated question to ensure the answer is grounded *solely* in the referenced note chunk.
+* **Self-Correction Loop**: If the Validator Agent rejects any question (e.g. for hallucinating information outside the notes), the graph loops back to the Generator Agent, passing the validator's critique so the generator can correct and replace only the rejected question.

@@ -1,0 +1,7 @@
+langchain
+langgraph
+openai
+pydantic
+python-dotenv
+pytest
+langchain-ollama

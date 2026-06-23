@@ -1,0 +1,53 @@
+# requirements.txt — shared; each team adds its dependencies.
+
+# LLM and agents (Team B/C)
+langchain
+langchain-openai
+langchain-community
+langgraph
+openai
+
+# MCP (Team A)
+mcp
+
+# Vector DB (Team A)
+chromadb
+
+# Hybrid retrieval — BM25 keyword search (Team A). Reranking uses sentence-transformers
+# (CrossEncoder), already listed below.
+rank-bm25
+
+# Embeddings (Team A) — OpenAI embeddings used via Chroma's embedding function;
+# sentence-transformers retained per project structure for optional local fallback.
+sentence-transformers
+
+# PDF ingestion + structure-aware chunking (Team A)
+pymupdf4llm
+pymupdf
+langchain-text-splitters
+tiktoken
+
+# Document formats (Team A)
+python-pptx
+
+# Handwriting / image-PDF OCR (Team A) — providers used only when OCR runs
+pytesseract
+pillow
+groq
+google-genai
+
+# Lecture audio/video transcription (Team A) — used only when transcribing
+faster-whisper
+imageio-ffmpeg
+
+# UI (Team C)
+streamlit
+
+# Schemas and validation (shared)
+pydantic
+
+# Environment (shared)
+python-dotenv
+
+# Testing (shared)
+pytest

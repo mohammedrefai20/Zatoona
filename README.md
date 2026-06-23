@@ -340,3 +340,80 @@ Rule: never push directly to main
       open a pull request and get one review before merging
 ```
 
+---
+
+## Team A: Infrastructure
+
+Team A handles ingestion and retrieval: read student notes into a local ChromaDB store and
+expose them to the other teams through one MCP tool. Design notes live in
+`specs/001-notes-ingestion-retrieval/` and `specs/002-multi-format-ingestion/`.
+
+### Supported inputs
+
+| Input | Handling |
+|-------|----------|
+| PDF (text layer) | text extracted directly |
+| PDF (scanned / handwritten) | OCR / vision transcription |
+| Markdown, plain text | read directly |
+| PowerPoint (`.pptx`) | slide text + speaker notes |
+| Audio (`.mp3`, `.wav`, `.m4a`) | speech-to-text |
+| Video (`.mp4`) | audio extracted then transcribed (set `VIDEO_ENABLED=true`) |
+
+Every input is turned into text plus provenance, then runs through the same chunk → embed →
+retrieve pipeline. Scanned PDFs and recordings are transcribed and approximate.
+
+### Pipeline
+
+1. Detect the format and turn it into text plus provenance (page, slide, or timestamp).
+2. Split into chunks on markdown headers, with a token-based fallback for long sections.
+3. Store the chunks in a ChromaDB collection; the collection's embedding function turns each
+   chunk into a vector.
+4. Read back through `get_relevant_chunks(topic)`. Nothing else reads the DB directly.
+
+### Modules
+
+| File | Responsibility |
+|------|----------------|
+| `schemas/note_chunk.py` | `NoteChunk` model (`chunk_id, topic, content, session_id`) |
+| `config/settings.py` | Loads `.env` config |
+| `vector_db/embedder.py` | Builds the embedding function (OpenAI or local) |
+| `vector_db/chroma_client.py` | Client, collection, `reset_collection()` |
+| `vector_db/loaders.py` | Detect format, extract/transcribe text, OCR and speech providers |
+| `vector_db/ingestion.py` | `ingest_file()`, plus `chunk_pdf()` / `ingest_pdf()` |
+| `vector_db/retriever.py` | `search()` and `search_debug()` |
+| `mcp_server/tools/retrieval_tool.py` | `get_relevant_chunks` tool |
+| `mcp_server/server.py` | FastMCP app and `start_mcp_server()` |
+
+### Run
+
+```
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+pytest tests/team_a
+python -m mcp_server.server
+streamlit run sandbox/app.py
+```
+
+### For Teams B and C
+
+Call `get_relevant_chunks(topic)` and use the returned list of `NoteChunk`. Don't read
+ChromaDB directly. Mock against the contracts in
+`specs/001-notes-ingestion-retrieval/contracts/`.
+
+### Configuration notes
+
+- Embeddings are computed inside the Chroma collection, so indexing and querying always use
+  the same model.
+- `EMBEDDING_PROVIDER` is `openai`, `local`, or `auto`. `auto` uses OpenAI when the key works
+  and falls back to a local sentence-transformers model otherwise. Groq has no embedding
+  models, so it is not an option for this layer.
+- `RETRIEVAL_MODE` is `hybrid` by default (dense vectors + BM25, fused with RRF, then reranked).
+  Set it to `dense` for vector-only search.
+- `RERANK_MIN_SCORE` drops weak results and `MIN_CHUNK_CHARS` drops tiny chunks; both are off
+  by default.
+- `OCR_PROVIDER` is `tesseract` (printed scans), `groq`, or `gemini` (handwriting via vision).
+  `ASR_PROVIDER` is `local` (faster-whisper) or `groq` (Whisper v3 Turbo). Hosted providers need
+  `GROQ_API_KEY` / `GEMINI_API_KEY`; local options need no key.
+- The collection resets each session (`SESSION_RESET_ON_START`); `session_id` tags every chunk.
+

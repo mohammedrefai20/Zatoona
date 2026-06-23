@@ -79,16 +79,22 @@ def _generate_encouragement(score: int, total: int, topics_to_review: list[str])
     return response.content.strip()
 
 # ── main corrector function ──────────────────────────────────
-
 def run_corrector(
-    exam_path: str,
-    answers_path: str,
-    mcp_tool  # function: get_relevant_chunks(topic) -> list[NoteChunk]
+    mcp_tool,
+    exam_path: str    = None,
+    answers_path: str = None,
+    exam: ExamObject  = None,
+    answers: dict     = None
 ) -> FeedbackReport:
 
-    # load exam and student answers
-    exam    = ExamObject(**_load_json(exam_path))
-    answers = _load_json(answers_path)
+    # accept either a preloaded object or load from file
+    if exam is None:
+        from agents.exam_loader import load_exam
+        exam = load_exam() if exam_path is None else ExamObject(**_load_json(exam_path))
+
+    if answers is None:
+        from agents.answer_loader import load_answers
+        answers = load_answers() if answers_path is None else _load_json(answers_path)
 
     # build a quick lookup: question_id -> student answer
     answer_map = {a["question_id"]: a["student_answer"] for a in answers["answers"]}

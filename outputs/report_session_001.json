@@ -4,14 +4,14 @@
   "topics_to_review": [
     "The French Revolution"
   ],
-  "encouragement": "I'm so proud of you for taking the first step and giving it your best shot on the history exam. Don't worry about the score - 3 out of 5 is a great starting point, and with some review of The French Revolution, I just know you'll master it in no time. Keep up the good work, stay motivated, and you'll be acing those history exams in no time - you got this!",
+  "encouragement": "I'm so proud of you for taking the first step and giving it your best shot on the history exam. Don't worry about the score - 3 out of 5 is a great starting point, and with some review of The French Revolution, you'll be acing the next test in no time. Keep up the good work, stay focused, and remember that every bit of effort you put in will bring you closer to achieving your goals.",
   "results": [
     {
       "question_id": "q1",
       "question": "In what year did World War 2 end?",
       "student_answer": "1945",
       "is_correct": true,
-      "explanation": "The student's answer is correct, World War 2 indeed ended in 1945, as confirmed by the relevant notes.",
+      "explanation": "The student answer matches the correct answer, confirming that World War 2 indeed ended in 1945, as noted in the historical records of the war's conclusion in both Europe and the Pacific.",
       "source_chunk": "World War 2 ended in 1945. The war in Europe ended in May 1945 with Germany's surrender and the war in the Pacific ended in September 1945 after Japan surrendered following the atomic bombings of Hiroshima and Nagasaki."
     },
     {
@@ -19,15 +19,15 @@
       "question": "Who was the leader of Nazi Germany during World War 2?",
       "student_answer": "Adolf Hitler",
       "is_correct": true,
-      "explanation": "The student answer matches the correct answer, Adolf Hitler was indeed the leader of Nazi Germany during World War 2.",
-      "source_chunk": "World War 2 ended in 1945. The war in Europe ended in May 1945 with Germany's surrender and the war in the Pacific ended in September 1945 after Japan surrendered following the atomic bombings of Hiroshima and Nagasaki."
+      "explanation": "The student's answer is correct, as confirmed by the relevant notes that Adolf Hitler was indeed the leader of Nazi Germany during World War 2.",
+      "source_chunk": "Adolf Hitler was the leader of Nazi Germany from 1933 until his death in 1945. He was the central figure of World War 2 in Europe and was responsible for the Holocaust."
     },
     {
       "question_id": "q3",
       "question": "In what year did the French Revolution begin?",
       "student_answer": "1788",
       "is_correct": false,
-      "explanation": "The correct answer is 1789, as stated in the notes. The French Revolution began in this year, marking the start of a period of radical political and social transformation in France. The student's answer of 1788 is one year too early.",
+      "explanation": "The correct answer is 1789, as stated in the notes, the French Revolution began in this year and marked a significant period of radical political and social transformation in France, ending the monarchy and establishing a republic. The student's answer of 1788 is one year too early.",
       "source_chunk": "The French Revolution began in 1789 and was a period of radical political and social transformation in France. It ended the monarchy and established a republic."
     },
     {
@@ -35,15 +35,15 @@
       "question": "What was the main prison stormed by revolutionaries at the start of the French Revolution?",
       "student_answer": "The Eiffel Tower",
       "is_correct": false,
-      "explanation": "The correct answer is The Bastille, not The Eiffel Tower. According to the notes, the French Revolution began in 1789, but the Eiffel Tower was not built until much later, and it is not associated with the start of the French Revolution. The Bastille, on the other hand, is a significant historical landmark that was indeed stormed by revolutionaries at the start of the French Revolution.",
-      "source_chunk": "The French Revolution began in 1789 and was a period of radical political and social transformation in France. It ended the monarchy and established a republic."
+      "explanation": "The correct answer is The Bastille, as it was the royal fortress and prison that symbolized royal tyranny and was stormed by revolutionaries on July 14, 1789, marking the starting point of the French Revolution, according to the notes. The Eiffel Tower, on the other hand, is not mentioned in the context of the French Revolution and was actually built much later.",
+      "source_chunk": "The storming of the Bastille on July 14 1789 is considered the starting point of the French Revolution. The Bastille was a royal fortress and prison that symbolized royal tyranny."
     },
     {
       "question_id": "q5",
       "question": "What was the capital city of the Ottoman Empire?",
       "student_answer": "Constantinople",
       "is_correct": true,
-      "explanation": "The student answer matches the correct answer, as stated in the notes, the capital city of the Ottoman Empire was indeed Constantinople.",
+      "explanation": "The student answer matches the correct answer, Constantinople, as stated in the relevant notes.",
       "source_chunk": "The Ottoman Empire was one of the most powerful states in the world during the 15th and 16th centuries. Its capital was Constantinople which is now known as Istanbul in modern Turkey."
     }
   ]

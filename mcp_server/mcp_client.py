@@ -5,20 +5,22 @@ from schemas.note_chunk import NoteChunk
 # when Team A is ready set USE_REAL_MCP=true in your .env
 USE_REAL_MCP = os.getenv("USE_REAL_MCP", "false").lower() == "true"
 
-def get_relevant_chunks(topic: str) -> list[NoteChunk]:
+def get_chunk_by_id(chunk_id: str) -> NoteChunk | None:
     if USE_REAL_MCP:
-        return _real_mcp_call(topic)
+        return _real_get_chunk_by_id(chunk_id)
     else:
-        return _mock_mcp_call(topic)
+        return _mock_get_chunk_by_id(chunk_id)
 
 # ── mock (current) ───────────────────────────────────────────
-def _mock_mcp_call(topic: str) -> list[NoteChunk]:
-    # uses local json file — no server needed
-    from tests.team_c.mock_mcp_tool import get_relevant_chunks as mock
-    return mock(topic)
+def _mock_get_chunk_by_id(chunk_id: str) -> NoteChunk | None:
+    from tests.team_c.mock_mcp_tool import get_chunk_by_id as mock
+    return mock(chunk_id)
+
 
 # ── real (tomorrow after meeting) ────────────────────────────
-def _real_mcp_call(topic: str) -> list[NoteChunk]:
-    # TODO: replace with Team A's real MCP server details after meeting
-    # MCP_HOST and MCP_PORT will come from .env
-    raise NotImplementedError("real MCP not connected yet — set USE_REAL_MCP=false until Team A is ready")
+def _real_get_chunk_by_id(chunk_id: str) -> NoteChunk | None:
+    raise NotImplementedError("real MCP not connected yet")
+
+
+
+

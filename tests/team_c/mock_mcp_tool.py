@@ -14,7 +14,9 @@ def _load_chunks():
         _mock_chunks = [NoteChunk(**c) for c in data["chunks"]]
     return _mock_chunks
 
-def get_relevant_chunks(topic: str) -> list[NoteChunk]:
-    # simulates MCP tool — returns chunks matching the topic
+def get_chunk_by_id(chunk_id: str) -> NoteChunk | None:
     chunks = _load_chunks()
-    return [c for c in chunks if c.topic.lower() == topic.lower()]
+    for c in chunks:
+        if c.chunk_id == chunk_id:
+            return c
+    return None

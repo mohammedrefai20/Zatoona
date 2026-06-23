@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from schemas.exam_object import ExamObject, Question
 from schemas.feedback_report import FeedbackReport, QuestionResult
 from config.settings import GROQ_API_KEY, MODEL_NAME
+from mcp_server.mcp_client import get_chunk_by_id
 
 # ── LLM setup ───────────────────────────────────────────────
 # one shared LLM instance used for all grading calls
@@ -80,7 +81,7 @@ def _generate_encouragement(score: int, total: int, topics_to_review: list[str])
 
 # ── main corrector function ──────────────────────────────────
 def run_corrector(
-    mcp_tool,
+    mcp_tool=get_chunk_by_id,
     exam_path: str    = None,
     answers_path: str = None,
     exam: ExamObject  = None,
@@ -107,8 +108,8 @@ def run_corrector(
         student_answer = answer_map.get(question.question_id, "")
 
         # get the relevant note chunk for this question from MCP
-        chunks = mcp_tool(question.topic)
-        chunk_content = chunks[0].content if chunks else "no notes available for this topic"
+        chunk = get_chunk_by_id(question.source_chunk_id)
+        chunk_content = chunk.content if chunk else "no notes available for this topic"
 
         # grade the answer
         result = _grade_answer(question, student_answer, chunk_content)

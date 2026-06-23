@@ -1,0 +1,34 @@
+{
+  "chunks": [
+    {
+      "chunk_id": "chunk_001",
+      "topic": "World War 2",
+      "content": "World War 2 ended in 1945. The war in Europe ended in May 1945 with Germany's surrender and the war in the Pacific ended in September 1945 after Japan surrendered following the atomic bombings of Hiroshima and Nagasaki.",
+      "session_id": "session_001"
+    },
+    {
+      "chunk_id": "chunk_002",
+      "topic": "World War 2",
+      "content": "Adolf Hitler was the leader of Nazi Germany from 1933 until his death in 1945. He was the central figure of World War 2 in Europe and was responsible for the Holocaust.",
+      "session_id": "session_001"
+    },
+    {
+      "chunk_id": "chunk_003",
+      "topic": "The French Revolution",
+      "content": "The French Revolution began in 1789 and was a period of radical political and social transformation in France. It ended the monarchy and established a republic.",
+      "session_id": "session_001"
+    },
+    {
+      "chunk_id": "chunk_004",
+      "topic": "The French Revolution",
+      "content": "The storming of the Bastille on July 14 1789 is considered the starting point of the French Revolution. The Bastille was a royal fortress and prison that symbolized royal tyranny.",
+      "session_id": "session_001"
+    },
+    {
+      "chunk_id": "chunk_005",
+      "topic": "The Ottoman Empire",
+      "content": "The Ottoman Empire was one of the most powerful states in the world during the 15th and 16th centuries. Its capital was Constantinople which is now known as Istanbul in modern Turkey.",
+      "session_id": "session_001"
+    }
+  ]
+}

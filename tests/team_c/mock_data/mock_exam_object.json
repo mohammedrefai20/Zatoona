@@ -1,0 +1,42 @@
+{
+  "session_id": "session_001",
+  "topics": ["World War 2", "The French Revolution", "The Ottoman Empire"],
+  "status": "validated",
+  "questions": [
+    {
+      "question_id": "q1",
+      "topic": "World War 2",
+      "question": "In what year did World War 2 end?",
+      "correct_answer": "1945",
+      "source_chunk_id": "chunk_001"
+    },
+    {
+      "question_id": "q2",
+      "topic": "World War 2",
+      "question": "Who was the leader of Nazi Germany during World War 2?",
+      "correct_answer": "Adolf Hitler",
+      "source_chunk_id": "chunk_002"
+    },
+    {
+      "question_id": "q3",
+      "topic": "The French Revolution",
+      "question": "In what year did the French Revolution begin?",
+      "correct_answer": "1789",
+      "source_chunk_id": "chunk_003"
+    },
+    {
+      "question_id": "q4",
+      "topic": "The French Revolution",
+      "question": "What was the main prison stormed by revolutionaries at the start of the French Revolution?",
+      "correct_answer": "The Bastille",
+      "source_chunk_id": "chunk_004"
+    },
+    {
+      "question_id": "q5",
+      "topic": "The Ottoman Empire",
+      "question": "What was the capital city of the Ottoman Empire?",
+      "correct_answer": "Constantinople",
+      "source_chunk_id": "chunk_005"
+    }
+  ]
+}

@@ -1,9 +1,3 @@
-"""Tests for the Docling document parser wrapper (vector_db/docling_parser.py).
-
-Markdown fixtures parse fully offline (no model download). PDF/image/OCR paths require Docling's
-layout/OCR models on first use, so those tests skip gracefully when the models are unavailable.
-"""
-
 import pytest
 
 from vector_db import docling_parser
@@ -91,5 +85,4 @@ def test_is_scanned_true_for_imageless_blank_pdf(tmp_path):
     doc.new_page()
     doc.save(str(pdf))
     doc.close()
-    # No text layer -> treated as scanned (will be routed through OCR).
     assert docling_parser.is_scanned(str(pdf)) is True

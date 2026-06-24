@@ -1,8 +1,3 @@
-"""Tests for the chunking strategy layer (vector_db/chunking.py).
-
-Uses markdown fixtures so the hybrid path runs offline (tokenizer is tiktoken, no model download).
-"""
-
 import pytest
 
 from vector_db import chunking, docling_parser
@@ -28,7 +23,7 @@ def test_hybrid_chunks_carry_heading_context(tmp_path):
 
     assert len(chunks) >= 1
     joined = "\n".join(c.content for c in chunks)
-    assert "Light-Dependent Reactions" in joined  # contextualize() prepends the heading breadcrumb
+    assert "Light-Dependent Reactions" in joined
     assert any("thylakoid" in c.content for c in chunks)
     for c in chunks:
         assert c.source_file == name
@@ -71,7 +66,7 @@ def test_default_mode_does_not_invoke_semantic(monkeypatch, tmp_path):
         return []
 
     monkeypatch.setattr(chunking, "_semantic_chunks", _spy)
-    chunking.chunk(dl, name)  # default CHUNK_MODE == "hybrid"
+    chunking.chunk(dl, name)
     assert calls["n"] == 0
 
 
@@ -87,7 +82,6 @@ def test_semantic_mode_dispatches(monkeypatch, tmp_path):
 
 
 def test_semantic_chunker_groups_by_similarity(monkeypatch, tmp_path):
-    """The real semantic path runs offline with a stubbed embedder (identical vectors -> merged)."""
     import vector_db.embedder as embedder
 
     dl, name = _doc(tmp_path)

@@ -1,11 +1,3 @@
-"""Ingestion orchestration.
-
-Documents (PDF/DOCX/PPTX/MD/TXT/HTML/images) are parsed by `docling_parser` and chunked by
-`chunking` (structure-aware HybridChunker by default). Audio/video go through `loaders` ASR.
-Everything is stored into Chroma with the public `content` plus internal-only provenance metadata.
-The frozen `NoteChunk` contract is unaffected.
-"""
-
 import os
 from dataclasses import dataclass
 
@@ -17,8 +9,6 @@ from vector_db import chunking, docling_parser, loaders
 
 @dataclass
 class ChunkRecord:
-    """Back-compat record shape returned by chunk_pdf()."""
-
     chunk_id: str
     content: str
     topic: str
@@ -36,7 +26,6 @@ def _get_collection(collection):
 
 
 def ingest_file(path, topic, session_id, collection=None):
-    """Route a file to document parsing (Docling) or audio/video transcription, then store."""
     if not os.path.isfile(path):
         raise ValueError(f"file not found: {path}")
 
@@ -76,7 +65,6 @@ def _store_chunks(chunks, topic, session_id, collection):
             "transcribed": ch.transcribed,
         }
         if ch.page is not None:
-            # PPTX provenance is a slide number; everything else is a page number.
             meta["slide" if ch.source_file.lower().endswith(".pptx") else "page"] = ch.page
         if ch.headings:
             meta["headings"] = " > ".join(ch.headings)
@@ -95,7 +83,6 @@ def _token_splitter():
 
 
 def _store_units(units, topic, session_id, collection):
-    """Store audio/video transcript units (token-split; no Docling structure)."""
     splitter = _token_splitter()
     ids, docs, metas = [], [], []
     index = 0
@@ -124,8 +111,6 @@ def _store_units(units, topic, session_id, collection):
     collection.upsert(ids=ids, documents=docs, metadatas=metas)
     return len(ids)
 
-
-# --- back-compat wrappers (Docling-backed) ---
 
 def ingest_pdf(pdf_path, topic, session_id, collection=None):
     return _ingest_document(pdf_path, topic, session_id, collection)

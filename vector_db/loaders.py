@@ -1,9 +1,3 @@
-"""Lecture audio/video loading + ASR.
-
-Document parsing (PDF/DOCX/PPTX/MD/HTML/images) now lives in `vector_db/docling_parser.py`;
-this module owns only the audio/video transcription path, which Docling does not handle.
-"""
-
 import os
 from dataclasses import dataclass
 
@@ -16,8 +10,6 @@ SUPPORTED_MEDIA = ".mp3 .wav .m4a .mp4"
 
 @dataclass
 class TextUnit:
-    """A transcribed span of a recording, with an approximate start timestamp."""
-
     text: str
     source_file: str
     timestamp: float = None
@@ -30,7 +22,6 @@ def is_media(path):
 
 
 def load_media(path):
-    """Transcribe an audio or (if enabled) video file into TextUnits."""
     if not os.path.isfile(path):
         raise ValueError(f"file not found: {path}")
 

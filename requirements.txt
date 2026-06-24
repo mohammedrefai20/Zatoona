@@ -21,29 +21,24 @@ rank-bm25
 # sentence-transformers retained per project structure for optional local fallback.
 sentence-transformers
 
-# Document parsing + structure-aware chunking (Team A) — Docling converts documents
-# (PDF/DOCX/PPTX/MD/HTML/images) into a structured DoclingDocument; HybridChunker chunks them
-# with heading-aware context. Replaces pymupdf4llm + python-pptx.
+# Document parsing + structure-aware chunking (Team A)
 docling
 
-# Free, local, no-API-key OCR engine, used via Docling's RapidOcrOptions for scanned/handwritten
-# PDFs and images (ONNX, no torch, best-effort on handwriting). Replaces tesseract/vision OCR.
+# OCR for scanned PDFs / images (Team A)
 rapidocr-onnxruntime
 
-# Tokenizer alignment for HybridChunker (OpenAI text-embedding-3) + audio-transcript splitting.
+# Tokenizer + token-based splitting (Team A)
 tiktoken
 langchain-text-splitters
 
-# pymupdf retained only to build small PDF fixtures in tests; product PDF parsing is via Docling.
+# PDF text-layer check + test fixtures (Team A)
 pymupdf
 
-# Image handling for the OCR/imaging paths.
+# Image handling (Team A)
 pillow
 
-# Groq retained for lecture-audio transcription (ASR) only.
+# Lecture audio/video transcription (Team A)
 groq
-
-# Lecture audio/video transcription (Team A) — used only when transcribing
 faster-whisper
 imageio-ffmpeg
 

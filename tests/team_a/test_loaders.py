@@ -1,5 +1,3 @@
-"""Audio/video loader tests (document parsing moved to test_docling_parser.py)."""
-
 import pytest
 
 from vector_db import loaders

@@ -1,17 +1,3 @@
-"""Docling document parsing.
-
-Converts a supported document (PDF/DOCX/PPTX/MD/TXT/HTML/images) into a structured
-`DoclingDocument`. Audio/video are NOT handled here (see `vector_db/loaders.py`).
-
-OCR for scanned PDFs / images uses Docling's free, local RapidOCR engine. With
-`force_full_page_ocr=False`, born-digital text is read from the PDF text layer and OCR runs only on
-image regions above the bitmap-area threshold.
-
-ponytail: RapidOCR is tuned for printed text — handwriting is best-effort. Upgrade path = a hosted
-vision-LLM OCR (Groq/Gemini) when budget allows. Generating captions for pure-image figures
-(`do_picture_description`, needs a vision model) is intentionally out of scope.
-"""
-
 import io
 import os
 
@@ -47,10 +33,11 @@ def _build_converter():
     }
     ocr_cls = engines.get(settings.DOCLING_OCR_ENGINE, RapidOcrOptions)
 
+    # future: RapidOCR is free and local but weak on handwriting; swap a vision-LLM OCR for that.
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = settings.DOCLING_DO_OCR
     ocr_options = ocr_cls()
-    ocr_options.force_full_page_ocr = False  # text layer for born-digital, OCR only image regions
+    ocr_options.force_full_page_ocr = False
     try:
         ocr_options.bitmap_area_threshold = settings.DOCLING_BITMAP_AREA_THRESHOLD
     except Exception:
@@ -75,7 +62,6 @@ def _get_converter():
 
 
 def parse(path):
-    """Parse a supported document into a DoclingDocument. Raises ValueError on bad input."""
     if not os.path.isfile(path):
         raise ValueError(f"file not found: {path}")
     ext = os.path.splitext(path)[1].lower()
@@ -93,7 +79,6 @@ def parse(path):
 
 
 def _to_source(path, ext):
-    # Docling has no plain-text input format; present .txt as markdown (plain text is valid markdown).
     if ext == ".txt":
         from docling.datamodel.base_models import DocumentStream
 
@@ -105,7 +90,6 @@ def _to_source(path, ext):
 
 
 def is_scanned(path):
-    """True if the input relies on OCR: image files, or PDFs without a usable text layer."""
     ext = os.path.splitext(path)[1].lower()
     if ext in _IMAGE_EXTS:
         return True

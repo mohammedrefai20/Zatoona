@@ -70,7 +70,6 @@ def test_hybrid_returns_notechunks(monkeypatch):
 
 
 def test_section_scoped_chunk_retrievable_by_heading(monkeypatch):
-    """Heading-enriched content (from HybridChunker contextualize) makes a section retrievable."""
     monkeypatch.setattr(retriever.settings, "RERANK_ENABLED", False)
     coll = FakeHybridCollection(
         ids=["c0", "c1"],

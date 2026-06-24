@@ -1,5 +1,3 @@
-"""Ingestion tests for the Docling document path + the unchanged audio path."""
-
 import pytest
 
 from vector_db import ingestion
@@ -33,9 +31,9 @@ def test_ingest_markdown_stores_contextualized_with_metadata(tmp_path):
     assert all(m["session_id"] == "s1" for m in metas)
     assert all(m["source_file"] == "notes.md" for m in metas)
     assert all(m["transcribed"] is False for m in metas)
-    assert any("headings" in m for m in metas)               # heading provenance is internal metadata
-    assert any("Mitochondria" in d for d in docs)            # heading context embedded into content
-    assert all(i.startswith("s1:notes.md:") for i in ids)    # deterministic id scheme
+    assert any("headings" in m for m in metas)
+    assert any("Mitochondria" in d for d in docs)
+    assert all(i.startswith("s1:notes.md:") for i in ids)
     assert len(set(ids)) == len(ids)
 
 
@@ -75,7 +73,6 @@ def test_audio_routes_to_media_path_with_timestamps(tmp_path, monkeypatch):
 
 
 def test_scanned_input_marks_transcribed(tmp_path, monkeypatch):
-    """OCR'd / image input is flagged transcribed without needing real OCR models."""
     from vector_db import chunking, docling_parser
 
     img = tmp_path / "scan.png"
@@ -123,8 +120,6 @@ def test_ingest_pptx_stores_slide_provenance(tmp_path):
 def test_scanned_pdf_ocr_end_to_end():
     pytest.skip("requires OCR models + image-PDF fixture; covered by quickstart.md Scenario 3")
 
-
-# --- embedder provider tests (unchanged; parsing-independent) ---
 
 def test_unknown_embedding_provider_raises(monkeypatch):
     from vector_db import embedder

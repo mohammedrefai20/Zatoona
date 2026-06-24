@@ -1,11 +1,3 @@
-"""Chunking strategy layer.
-
-Turns a DoclingDocument into internal `Chunk`s. Strategy is selected by `settings.CHUNK_MODE`:
-- "hybrid" (default): Docling HybridChunker, tokenizer-aligned to the OpenAI embedding model, storing
-  the `contextualize()` output (heading/caption breadcrumbs + text) so embed == store.
-- "semantic" (opt-in): embedding-similarity splitting (implemented in T017).
-"""
-
 from dataclasses import dataclass, field
 
 from config import settings
@@ -73,11 +65,7 @@ def _first_page(ch):
 
 
 def _semantic_chunks(dl_doc, source_file, transcribed=False):
-    """Group adjacent structural units while embedding cosine similarity stays high.
-
-    ponytail: reuses the (paid) OpenAI embedder at ingest time. Upgrade path = a local embedding
-    model for free semantic splitting.
-    """
+    # future: reuses the paid OpenAI embedder at ingest; a local embedding model would make it free.
     import tiktoken
     from docling.chunking import HierarchicalChunker
 

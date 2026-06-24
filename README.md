@@ -44,7 +44,10 @@ vector_db/
 ├── __init__.py
 ├── chroma_client.py            # ChromaDB connection and collection setup
 ├── embedder.py                 # converts text chunks into vector embeddings
-├── ingestion.py                # takes raw notes → chunks → embeds → stores
+├── docling_parser.py           # parse documents (PDF/DOCX/PPTX/MD/HTML/images) via Docling
+├── chunking.py                 # HybridChunker (default) / semantic chunking strategies
+├── loaders.py                  # audio/video transcription (ASR)
+├── ingestion.py                # routes files → parse/transcribe → chunk → embeds → stores
 └── retriever.py                # semantic search logic used by retrieval_tool
 ```
 
@@ -346,28 +349,36 @@ Rule: never push directly to main
 
 Team A handles ingestion and retrieval: read student notes into a local ChromaDB store and
 expose them to the other teams through one MCP tool. Design notes live in
-`specs/001-notes-ingestion-retrieval/` and `specs/002-multi-format-ingestion/`.
+`specs/001-notes-ingestion-retrieval/`, `specs/002-multi-format-ingestion/`, and
+`specs/003-docling-parsing-chunking/`.
 
 ### Supported inputs
 
+Documents are parsed by [Docling](https://docling-project.github.io/docling/) into a structure-aware
+representation; audio/video are transcribed.
+
 | Input | Handling |
 |-------|----------|
-| PDF (text layer) | text extracted directly |
-| PDF (scanned / handwritten) | OCR / vision transcription |
-| Markdown, plain text | read directly |
-| PowerPoint (`.pptx`) | slide text + speaker notes |
-| Audio (`.mp3`, `.wav`, `.m4a`) | speech-to-text |
+| PDF (text layer) | Docling reads the text layer; embedded figures are OCR'd by region |
+| PDF (scanned / handwritten) | Docling OCR via RapidOCR (free, local, no key; handwriting best-effort) |
+| Word (`.docx`), PowerPoint (`.pptx`), HTML | Docling structure-aware parse (slides carry slide provenance) |
+| Markdown, plain text | Docling parse (headings preserved) |
+| Images (`.png`, `.jpg`, …) | Docling OCR |
+| Audio (`.mp3`, `.wav`, `.m4a`) | speech-to-text (faster-whisper / Groq) |
 | Video (`.mp4`) | audio extracted then transcribed (set `VIDEO_ENABLED=true`) |
 
-Every input is turned into text plus provenance, then runs through the same chunk → embed →
-retrieve pipeline. Scanned PDFs and recordings are transcribed and approximate.
+Scanned PDFs, images, and recordings are transcribed and approximate.
 
 ### Pipeline
 
-1. Detect the format and turn it into text plus provenance (page, slide, or timestamp).
-2. Split into chunks on markdown headers, with a token-based fallback for long sections.
-3. Store the chunks in a ChromaDB collection; the collection's embedding function turns each
-   chunk into a vector.
+1. Route the file: documents → Docling parse; audio/video → transcription.
+2. Chunk documents with Docling's **HybridChunker** (tokenizer-aligned to the embedding model). Each
+   chunk's stored text is the `contextualize()` output — its heading/section breadcrumbs prepended —
+   so the embedded text and the stored text are the same and carry their structural context.
+   `CHUNK_MODE=semantic` switches to embedding-similarity chunking (opt-in). Audio transcripts are
+   token-split.
+3. Store chunks in a ChromaDB collection; the collection's embedding function turns each chunk into a
+   vector. Page / slide / heading / timestamp provenance is kept as internal metadata only.
 4. Read back through `get_relevant_chunks(topic)`. Nothing else reads the DB directly.
 
 ### Modules
@@ -378,7 +389,9 @@ retrieve pipeline. Scanned PDFs and recordings are transcribed and approximate.
 | `config/settings.py` | Loads `.env` config |
 | `vector_db/embedder.py` | Builds the embedding function (OpenAI or local) |
 | `vector_db/chroma_client.py` | Client, collection, `reset_collection()` |
-| `vector_db/loaders.py` | Detect format, extract/transcribe text, OCR and speech providers |
+| `vector_db/docling_parser.py` | Parse documents to a `DoclingDocument` (RapidOCR for scans/images) |
+| `vector_db/chunking.py` | `chunk()` — HybridChunker (default) or semantic strategy → `Chunk`s |
+| `vector_db/loaders.py` | Audio/video transcription (ASR providers) |
 | `vector_db/ingestion.py` | `ingest_file()`, plus `chunk_pdf()` / `ingest_pdf()` |
 | `vector_db/retriever.py` | `search()` and `search_debug()` |
 | `mcp_server/tools/retrieval_tool.py` | `get_relevant_chunks` tool |
@@ -412,8 +425,12 @@ ChromaDB directly. Mock against the contracts in
   Set it to `dense` for vector-only search.
 - `RERANK_MIN_SCORE` drops weak results and `MIN_CHUNK_CHARS` drops tiny chunks; both are off
   by default.
-- `OCR_PROVIDER` is `tesseract` (printed scans), `groq`, or `gemini` (handwriting via vision).
-  `ASR_PROVIDER` is `local` (faster-whisper) or `groq` (Whisper v3 Turbo). Hosted providers need
-  `GROQ_API_KEY` / `GEMINI_API_KEY`; local options need no key.
+- `CHUNK_MODE` is `hybrid` (structure-aware, default) or `semantic` (embedding-similarity, opt-in;
+  reuses the OpenAI embedder at ingest). `CHUNK_MAX_TOKENS` sets the per-chunk token budget.
+- Document OCR is free and local via Docling: `DOCLING_OCR_ENGINE` is `rapidocr` (default), `easyocr`,
+  or `tesseract`; `DOCLING_DO_OCR` toggles it; `DOCLING_BITMAP_AREA_THRESHOLD` tunes how aggressively
+  embedded figures are OCR'd. Handwriting is best-effort (a hosted vision-LLM OCR is the future upgrade).
+- `ASR_PROVIDER` is `local` (faster-whisper) or `groq` (Whisper v3 Turbo); hosted needs `GROQ_API_KEY`,
+  local needs no key.
 - The collection resets each session (`SESSION_RESET_ON_START`); `session_id` tags every chunk.
 

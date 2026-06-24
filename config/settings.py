@@ -27,13 +27,25 @@ _min_score = os.getenv("RERANK_MIN_SCORE", "").strip()
 RERANK_MIN_SCORE = float(_min_score) if _min_score else None
 MIN_CHUNK_CHARS = int(os.getenv("MIN_CHUNK_CHARS", "0"))
 
+# Lecture audio/video transcription (ASR) — unchanged path.
 ASR_PROVIDER = os.getenv("ASR_PROVIDER", "local").lower()
 ASR_MODEL = os.getenv("ASR_MODEL", "base")
-OCR_PROVIDER = os.getenv("OCR_PROVIDER", "tesseract").lower()
-VISION_MODEL = os.getenv("VISION_MODEL", "")
 VIDEO_ENABLED = os.getenv("VIDEO_ENABLED", "false").lower() == "true"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Document parsing + chunking (Docling).
+# CHUNK_MODE: hybrid (structure-aware, default) | semantic (embedding-similarity, opt-in)
+CHUNK_MODE = os.getenv("CHUNK_MODE", "hybrid").lower()
+# Token budget per chunk, aligned to the embedding model's tokenizer.
+CHUNK_MAX_TOKENS = int(os.getenv("CHUNK_MAX_TOKENS", "512"))
+# Docling PDF OCR: run OCR on scanned pages / image regions of otherwise-text PDFs.
+DOCLING_DO_OCR = os.getenv("DOCLING_DO_OCR", "true").lower() == "true"
+# OCR engine Docling uses (free/local default). Swappable: rapidocr | easyocr | tesseract.
+DOCLING_OCR_ENGINE = os.getenv("DOCLING_OCR_ENGINE", "rapidocr").lower()
+# Minimum image-region area (fraction of page) that triggers region OCR; tune for speed vs recall.
+DOCLING_BITMAP_AREA_THRESHOLD = float(os.getenv("DOCLING_BITMAP_AREA_THRESHOLD", "0.05"))
+# Semantic chunking: adjacent structural units merge while cosine similarity stays >= this threshold.
+SEMANTIC_SIM_THRESHOLD = float(os.getenv("SEMANTIC_SIM_THRESHOLD", "0.5"))
 
 SESSION_RESET = os.getenv("SESSION_RESET_ON_START", "true").lower() == "true"
 

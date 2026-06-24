@@ -69,6 +69,27 @@ def test_hybrid_returns_notechunks(monkeypatch):
     assert all(set(c.model_dump()) == {"chunk_id", "topic", "content", "session_id"} for c in chunks)
 
 
+def test_section_scoped_chunk_retrievable_by_heading(monkeypatch):
+    """Heading-enriched content (from HybridChunker contextualize) makes a section retrievable."""
+    monkeypatch.setattr(retriever.settings, "RERANK_ENABLED", False)
+    coll = FakeHybridCollection(
+        ids=["c0", "c1"],
+        docs=[
+            "Photosynthesis > Light-Dependent Reactions\nProduces ATP and NADPH in the thylakoid membrane.",
+            "Photosynthesis > Calvin Cycle\nFixes carbon dioxide into glucose within the stroma.",
+        ],
+        metas=[
+            {"topic": "bio", "session_id": "s1", "headings": "Photosynthesis > Light-Dependent Reactions"},
+            {"topic": "bio", "session_id": "s1", "headings": "Photosynthesis > Calvin Cycle"},
+        ],
+    )
+    chunks = retriever.search("light-dependent reactions", top_k=1, collection=coll, mode="hybrid")
+
+    assert len(chunks) == 1
+    assert "Light-Dependent Reactions" in chunks[0].content
+    assert set(chunks[0].model_dump()) == {"chunk_id", "topic", "content", "session_id"}
+
+
 def test_search_debug_exposes_pipeline_stages(monkeypatch):
     monkeypatch.setattr(retriever.settings, "RERANK_ENABLED", False)
     coll = FakeHybridCollection(

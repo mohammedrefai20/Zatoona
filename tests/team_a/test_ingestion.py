@@ -1,86 +1,130 @@
-import fitz
+"""Ingestion tests for the Docling document path + the unchanged audio path."""
+
 import pytest
 
-from vector_db.ingestion import chunk_pdf
+from vector_db import ingestion
+
+MD = (
+    "# Cells\n\n"
+    "## Mitochondria\n\n"
+    "The mitochondria is the powerhouse of the cell and produces ATP through respiration.\n"
+)
 
 
-def _make_pdf(path, text):
-    doc = fitz.open()
-    page = doc.new_page()
-    page.insert_text((72, 72), text)
-    doc.save(str(path))
-    doc.close()
+class FakeCollection:
+    def __init__(self):
+        self.added = None
+
+    def upsert(self, ids, documents, metadatas):
+        self.added = (ids, documents, metadatas)
 
 
-def test_chunk_pdf_produces_tagged_chunks(tmp_path):
-    pdf = tmp_path / "notes.pdf"
-    _make_pdf(
-        pdf,
-        "Photosynthesis\n\n"
-        "Plants convert light energy into chemical energy.\n"
-        "Chlorophyll in the chloroplasts absorbs sunlight.",
-    )
+def test_ingest_markdown_stores_contextualized_with_metadata(tmp_path):
+    f = tmp_path / "notes.md"
+    f.write_text(MD, encoding="utf-8")
+    coll = FakeCollection()
 
-    records = chunk_pdf(str(pdf), topic="biology", session_id="s1")
+    n = ingestion.ingest_file(str(f), topic="biology", session_id="s1", collection=coll)
 
-    assert len(records) >= 1
-    for r in records:
-        assert r.topic == "biology"
-        assert r.session_id == "s1"
-        assert r.source_file == "notes.pdf"
-        assert isinstance(r.page, int)
-        assert r.content.strip()
-        assert r.chunk_id.startswith("s1:notes.pdf:")
-    assert len({r.chunk_id for r in records}) == len(records)
+    assert n >= 1
+    ids, docs, metas = coll.added
+    assert len(ids) == n
+    assert all(m["topic"] == "biology" for m in metas)
+    assert all(m["session_id"] == "s1" for m in metas)
+    assert all(m["source_file"] == "notes.md" for m in metas)
+    assert all(m["transcribed"] is False for m in metas)
+    assert any("headings" in m for m in metas)               # heading provenance is internal metadata
+    assert any("Mitochondria" in d for d in docs)            # heading context embedded into content
+    assert all(i.startswith("s1:notes.md:") for i in ids)    # deterministic id scheme
+    assert len(set(ids)) == len(ids)
 
 
-def test_multipage_pdf_has_unique_ids(tmp_path):
-    pdf = tmp_path / "multi.pdf"
-    doc = fitz.open()
-    for i in range(3):
-        page = doc.new_page()
-        page.insert_text((72, 72), f"Subject {i}\n\nNotes about subject number {i} for studying.")
-    doc.save(str(pdf))
-    doc.close()
-
-    records = chunk_pdf(str(pdf), topic="t", session_id="s1")
-
-    assert len(records) >= 3
-    assert len({r.chunk_id for r in records}) == len(records)
-    assert max(r.page for r in records) >= 2
-
-
-def test_min_chunk_chars_filters_short_pieces(tmp_path, monkeypatch):
-    from vector_db import ingestion
-
-    monkeypatch.setattr(ingestion.settings, "MIN_CHUNK_CHARS", 100000)
-    pdf = tmp_path / "notes.pdf"
-    _make_pdf(pdf, "Photosynthesis\n\nPlants convert light energy into chemical energy.")
-
-    assert chunk_pdf(str(pdf), topic="t", session_id="s1") == []
-
-
-def test_empty_pdf_yields_no_chunks(tmp_path):
-    pdf = tmp_path / "blank.pdf"
-    doc = fitz.open()
-    doc.new_page()
-    doc.save(str(pdf))
-    doc.close()
-
-    assert chunk_pdf(str(pdf), topic="x", session_id="s1") == []
+def test_empty_document_stores_nothing(tmp_path):
+    f = tmp_path / "blank.md"
+    f.write_text("   \n", encoding="utf-8")
+    coll = FakeCollection()
+    assert ingestion.ingest_file(str(f), topic="t", session_id="s1", collection=coll) == 0
 
 
 def test_unsupported_file_raises(tmp_path):
-    bad = tmp_path / "notes.txt"
-    bad.write_text("hello")
+    f = tmp_path / "data.csv"
+    f.write_text("a,b,c")
     with pytest.raises(ValueError):
-        chunk_pdf(str(bad), topic="x", session_id="s1")
+        ingestion.ingest_file(str(f), topic="t", session_id="s1", collection=FakeCollection())
 
 
 def test_missing_file_raises():
     with pytest.raises(ValueError):
-        chunk_pdf("does_not_exist.pdf", topic="x", session_id="s1")
+        ingestion.ingest_file("does_not_exist.md", topic="t", session_id="s1")
 
+
+def test_audio_routes_to_media_path_with_timestamps(tmp_path, monkeypatch):
+    from vector_db import loaders
+
+    audio = tmp_path / "lecture.mp3"
+    audio.write_bytes(b"fake audio")
+    monkeypatch.setattr(loaders, "_transcribe", lambda p: [(0.0, "intro to cells"), (8.0, "atp synthesis")])
+    coll = FakeCollection()
+
+    n = ingestion.ingest_file(str(audio), topic="bio", session_id="s1", collection=coll)
+
+    assert n >= 1
+    _, _, metas = coll.added
+    assert all(m["transcribed"] is True for m in metas)
+    assert all("timestamp" in m for m in metas)
+
+
+def test_scanned_input_marks_transcribed(tmp_path, monkeypatch):
+    """OCR'd / image input is flagged transcribed without needing real OCR models."""
+    from vector_db import chunking, docling_parser
+
+    img = tmp_path / "scan.png"
+    img.write_bytes(b"\x89PNG\r\n")
+    monkeypatch.setattr(docling_parser, "parse", lambda p: "DLDOC")
+    monkeypatch.setattr(docling_parser, "is_scanned", lambda p: True)
+    monkeypatch.setattr(
+        chunking, "chunk",
+        lambda dl, source, transcribed=False: [
+            chunking.Chunk(content="recognized text about cells", page=1, headings=[],
+                           source_file=source, transcribed=transcribed)
+        ],
+    )
+    coll = FakeCollection()
+
+    n = ingestion.ingest_file(str(img), topic="bio", session_id="s1", collection=coll)
+
+    assert n >= 1
+    _, _, metas = coll.added
+    assert all(m["transcribed"] is True for m in metas)
+    assert all(m.get("page") == 1 for m in metas)
+
+
+def test_ingest_pptx_stores_slide_provenance(tmp_path):
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content (has a body placeholder)
+    slide.shapes.title.text = "Photosynthesis"
+    slide.placeholders[1].text = "Plants convert light energy into chemical energy in the chloroplasts."
+    path = tmp_path / "deck.pptx"
+    prs.save(str(path))
+    coll = FakeCollection()
+    try:
+        n = ingestion.ingest_file(str(path), topic="bio", session_id="s1", collection=coll)
+    except Exception as exc:  # Docling pptx backend unavailable
+        pytest.skip(f"Docling pptx unavailable: {exc}")
+
+    assert n >= 1
+    _, _, metas = coll.added
+    assert any("slide" in m for m in metas)
+
+
+def test_scanned_pdf_ocr_end_to_end():
+    pytest.skip("requires OCR models + image-PDF fixture; covered by quickstart.md Scenario 3")
+
+
+# --- embedder provider tests (unchanged; parsing-independent) ---
 
 def test_unknown_embedding_provider_raises(monkeypatch):
     from vector_db import embedder

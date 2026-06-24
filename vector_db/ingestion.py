@@ -1,21 +1,24 @@
+"""Ingestion orchestration.
+
+Documents (PDF/DOCX/PPTX/MD/TXT/HTML/images) are parsed by `docling_parser` and chunked by
+`chunking` (structure-aware HybridChunker by default). Audio/video go through `loaders` ASR.
+Everything is stored into Chroma with the public `content` plus internal-only provenance metadata.
+The frozen `NoteChunk` contract is unaffected.
+"""
+
 import os
 from dataclasses import dataclass
 
-import pymupdf4llm
-from langchain_text_splitters import (
-    MarkdownHeaderTextSplitter,
-    RecursiveCharacterTextSplitter,
-)
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import settings
-
-HEADERS = [("#", "h1"), ("##", "h2"), ("###", "h3")]
-CHUNK_TOKENS = 512
-OVERLAP_TOKENS = 64
+from vector_db import chunking, docling_parser, loaders
 
 
 @dataclass
 class ChunkRecord:
+    """Back-compat record shape returned by chunk_pdf()."""
+
     chunk_id: str
     content: str
     topic: str
@@ -24,100 +27,90 @@ class ChunkRecord:
     page: int
 
 
-def _split_markdown(md_text):
-    header_splitter = MarkdownHeaderTextSplitter(
-        headers_to_split_on=HEADERS, strip_headers=False
-    )
-    token_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=CHUNK_TOKENS, chunk_overlap=OVERLAP_TOKENS
-    )
-    pieces = []
-    for section in header_splitter.split_text(md_text):
-        text = section.page_content.strip()
-        if not text:
-            continue
-        for sub in token_splitter.split_text(text):
-            sub = sub.strip()
-            if sub and len(sub) >= settings.MIN_CHUNK_CHARS:
-                pieces.append(sub)
-    return pieces
+def _get_collection(collection):
+    if collection is not None:
+        return collection
+    from vector_db.chroma_client import get_collection
 
-
-def chunk_pdf(pdf_path, topic, session_id):
-    if not os.path.isfile(pdf_path):
-        raise ValueError(f"file not found: {pdf_path}")
-    if not pdf_path.lower().endswith(".pdf"):
-        raise ValueError(f"not a pdf: {pdf_path}")
-
-    source_file = os.path.basename(pdf_path)
-    try:
-        pages = pymupdf4llm.to_markdown(pdf_path, page_chunks=True)
-    except Exception as exc:
-        raise ValueError(f"could not parse {source_file}: {exc}") from exc
-
-    records = []
-    index = 0
-    for page_number, page_data in enumerate(pages, start=1):
-        md_text = page_data.get("text", "") or ""
-        for piece in _split_markdown(md_text):
-            records.append(
-                ChunkRecord(
-                    chunk_id=f"{session_id}:{source_file}:{page_number}:{index}",
-                    content=piece,
-                    topic=topic,
-                    session_id=session_id,
-                    source_file=source_file,
-                    page=page_number,
-                )
-            )
-            index += 1
-    return records
+    return get_collection()
 
 
 def ingest_file(path, topic, session_id, collection=None):
-    from vector_db import loaders
-
+    """Route a file to document parsing (Docling) or audio/video transcription, then store."""
     if not os.path.isfile(path):
         raise ValueError(f"file not found: {path}")
 
-    ext = os.path.splitext(path)[1].lower()
-    if ext == ".pdf":
-        if loaders.pdf_has_text_layer(path):
-            return ingest_pdf(path, topic, session_id, collection)
-        units = loaders.load_pdf_ocr(path, os.path.basename(path))
-        return _store_units(units, topic, session_id, collection) if units else 0
+    if docling_parser.is_document(path):
+        return _ingest_document(path, topic, session_id, collection)
+    if loaders.is_media(path):
+        units = loaders.load_media(path)
+        return _store_units(units, topic, session_id, collection)
 
-    units = loaders.load_text(path)
-    if not units:
+    ext = os.path.splitext(path)[1].lower()
+    raise ValueError(
+        f"unsupported file type: {ext}. supported documents: "
+        f"{' '.join(sorted(docling_parser.SUPPORTED_DOC_EXTS))}; media: {loaders.SUPPORTED_MEDIA}"
+    )
+
+
+def _ingest_document(path, topic, session_id, collection):
+    source = os.path.basename(path)
+    dl_doc = docling_parser.parse(path)
+    transcribed = docling_parser.is_scanned(path)
+    chunks = chunking.chunk(dl_doc, source, transcribed=transcribed)
+    return _store_chunks(chunks, topic, session_id, collection)
+
+
+def _store_chunks(chunks, topic, session_id, collection):
+    if not chunks:
         return 0
-    return _store_units(units, topic, session_id, collection)
+    collection = _get_collection(collection)
+
+    ids, docs, metas = [], [], []
+    for index, ch in enumerate(chunks):
+        locator = ch.page if ch.page is not None else 0
+        meta = {
+            "topic": topic,
+            "session_id": session_id,
+            "source_file": ch.source_file,
+            "transcribed": ch.transcribed,
+        }
+        if ch.page is not None:
+            # PPTX provenance is a slide number; everything else is a page number.
+            meta["slide" if ch.source_file.lower().endswith(".pptx") else "page"] = ch.page
+        if ch.headings:
+            meta["headings"] = " > ".join(ch.headings)
+        ids.append(f"{session_id}:{ch.source_file}:{locator}:{index}")
+        docs.append(ch.content)
+        metas.append(meta)
+
+    collection.upsert(ids=ids, documents=docs, metadatas=metas)
+    return len(ids)
+
+
+def _token_splitter():
+    return RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=settings.CHUNK_MAX_TOKENS, chunk_overlap=64
+    )
 
 
 def _store_units(units, topic, session_id, collection):
-    if collection is None:
-        from vector_db.chroma_client import get_collection
-
-        collection = get_collection()
-
+    """Store audio/video transcript units (token-split; no Docling structure)."""
+    splitter = _token_splitter()
     ids, docs, metas = [], [], []
     index = 0
     for unit in units:
-        locator = unit.page or unit.slide
-        if locator is None and unit.timestamp is not None:
-            locator = int(unit.timestamp)
-        if locator is None:
-            locator = 0
-        for piece in _split_markdown(unit.text):
+        locator = int(unit.timestamp) if unit.timestamp is not None else 0
+        for piece in splitter.split_text(unit.text):
+            piece = piece.strip()
+            if not piece or len(piece) < settings.MIN_CHUNK_CHARS:
+                continue
             meta = {
                 "topic": topic,
                 "session_id": session_id,
                 "source_file": unit.source_file,
                 "transcribed": unit.transcribed,
             }
-            if unit.page is not None:
-                meta["page"] = unit.page
-            if unit.slide is not None:
-                meta["slide"] = unit.slide
             if unit.timestamp is not None:
                 meta["timestamp"] = unit.timestamp
             ids.append(f"{session_id}:{unit.source_file}:{locator}:{index}")
@@ -127,31 +120,38 @@ def _store_units(units, topic, session_id, collection):
 
     if not ids:
         return 0
+    collection = _get_collection(collection)
     collection.upsert(ids=ids, documents=docs, metadatas=metas)
     return len(ids)
 
 
+# --- back-compat wrappers (Docling-backed) ---
+
 def ingest_pdf(pdf_path, topic, session_id, collection=None):
-    records = chunk_pdf(pdf_path, topic, session_id)
-    if not records:
-        return 0
+    return _ingest_document(pdf_path, topic, session_id, collection)
 
-    if collection is None:
-        from vector_db.chroma_client import get_collection
 
-        collection = get_collection()
+def chunk_pdf(pdf_path, topic, session_id):
+    if not os.path.isfile(pdf_path):
+        raise ValueError(f"file not found: {pdf_path}")
+    if not pdf_path.lower().endswith(".pdf"):
+        raise ValueError(f"not a pdf: {pdf_path}")
 
-    collection.upsert(
-        ids=[r.chunk_id for r in records],
-        documents=[r.content for r in records],
-        metadatas=[
-            {
-                "topic": r.topic,
-                "session_id": r.session_id,
-                "source_file": r.source_file,
-                "page": r.page,
-            }
-            for r in records
-        ],
-    )
-    return len(records)
+    source = os.path.basename(pdf_path)
+    dl_doc = docling_parser.parse(pdf_path)
+    chunks = chunking.chunk(dl_doc, source, transcribed=docling_parser.is_scanned(pdf_path))
+
+    records = []
+    for index, ch in enumerate(chunks):
+        page = ch.page if ch.page is not None else 0
+        records.append(
+            ChunkRecord(
+                chunk_id=f"{session_id}:{source}:{page}:{index}",
+                content=ch.content,
+                topic=topic,
+                session_id=session_id,
+                source_file=source,
+                page=page,
+            )
+        )
+    return records

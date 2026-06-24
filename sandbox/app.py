@@ -27,6 +27,8 @@ with st.sidebar:
     st.header("Status")
     st.write(f"Embedding provider: `{settings.EMBEDDING_PROVIDER}`")
     st.write(f"Active embedder: `{active_provider()}`")
+    st.write(f"Chunk mode: `{settings.CHUNK_MODE}`")
+    st.write(f"OCR engine: `{settings.DOCLING_OCR_ENGINE}`")
     st.write(f"Retrieval mode: `{settings.RETRIEVAL_MODE}`")
     st.write(f"Rerank enabled: `{settings.RERANK_ENABLED}`")
     st.write(f"Rerank min score: `{settings.RERANK_MIN_SCORE}`")
@@ -42,7 +44,7 @@ with st.sidebar:
         st.rerun()
 
 
-st.header("1) Ingest a PDF")
+st.header("1) Ingest documents & recordings")
 col_a, col_b = st.columns(2)
 with col_a:
     topic = st.text_input("Topic", value="biology")
@@ -51,11 +53,13 @@ with col_b:
 
 uploaded = st.file_uploader(
     "Upload study files",
-    type=["pdf", "md", "txt", "pptx", "mp3", "wav", "m4a", "mp4"],
+    type=["pdf", "docx", "pptx", "md", "txt", "html", "htm",
+          "png", "jpg", "jpeg", "mp3", "wav", "m4a", "mp4"],
     accept_multiple_files=True,
 )
-st.caption("PDF (text or scanned), Markdown, text, PowerPoint, audio, video. "
-           "Scanned PDFs and recordings are transcribed and approximate.")
+st.caption("Documents (PDF text/scanned, Word, PowerPoint, Markdown, text, HTML, images) are parsed "
+           "by Docling; audio/video are transcribed. Scanned/handwritten pages and recordings are "
+           "transcribed and approximate.")
 
 if uploaded and st.button("Ingest"):
     for up in uploaded:
@@ -85,7 +89,8 @@ if uploaded and st.button("Ingest"):
         else:
             loc = ""
         badge = " · transcribed" if meta.get("transcribed") else ""
-        with st.expander(f"{cid}  ·  {loc}{badge}"):
+        headings = f"  ·  {meta['headings']}" if meta.get("headings") else ""
+        with st.expander(f"{cid}  ·  {loc}{badge}{headings}"):
             st.write(doc)
 
 

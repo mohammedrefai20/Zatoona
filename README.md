@@ -1,451 +1,384 @@
-# Classroom Exam Agent — Project Structure
+# Team A — Notes Ingestion & Retrieval (Infrastructure)
+
+This is **Team A's** part of the Classroom Exam Agent. We own the layer that turns a student's raw
+material — PDFs, slides, docs, images, audio/video, YouTube, Notion pages, and optional web
+enrichment — into a searchable local vector store, and expose it to the rest of the system through
+**one MCP gateway**. Teams B (exam creation) and C (grading) never touch the database directly; they
+call our MCP tool.
+
+> Frozen contracts and design notes live in `specs/001`…`specs/006` and `.specify/memory/constitution.md`.
+> The MCP server is the **only** gateway to the vector DB.
 
 ---
 
-## Root Structure
+## What Team A owns
 
 ```
-classroom-exam-agent/
-│
-├── .env                        # all API keys and config (never commit this)
-├── .env.example                # template showing required env variables
-├── .gitignore                  # ignore .env, __pycache__, chroma_db/, etc.
-├── requirements.txt            # all python dependencies
-├── README.md                   # project overview and setup instructions
-├── main.py                     # entry point — starts the full pipeline
-│
-├── config/
-│   └── settings.py             # loads .env and exposes config constants
-│
-├── mcp_server/                 # TEAM A
-├── vector_db/                  # TEAM A
-├── agents/                     # TEAM B + TEAM C
-├── graph/                      # TEAM B
-├── ui/                         # TEAM C
-├── schemas/                    # SHARED — all teams
-└── tests/                      # SHARED — all teams
-```
+mcp_server/                      # the gateway Teams B & C call
+├── server.py                    # FastMCP app "leo-notes" + start_mcp_server()
+└── tools/retrieval_tool.py      # get_relevant_chunks(topic), get_chunk_by_id(chunk_id)
 
----
+vector_db/                       # ingest + store + retrieve
+├── docling_parser.py            # PDF/DOCX/PPTX/MD/HTML/images → DoclingDocument (OCR for scans)
+├── chunking.py                  # HybridChunker (default) or semantic chunking → Chunk[]
+├── loaders.py                   # audio/video → transcript TextUnit[] (faster-whisper / Groq)
+├── youtube.py                   # captions (free) + playlist enumerate + audio fallback
+├── notion.py                    # Notion page payload → markdown text (no Notion SDK here)
+├── enrichment.py                # opt-in web search → approve → ingest (source_type="web")
+├── ingestion.py                 # router: file/url/text → parse/transcribe → chunk → store
+├── embedder.py                  # embedding function (OpenAI / local / auto)
+├── chroma_client.py             # per-session ChromaDB client + collection + reset
+└── retriever.py                 # hybrid (dense+BM25+RRF+rerank) / dense search
 
-## Team A — Infrastructure
-
-```
-mcp_server/
-│
-├── __init__.py
-├── server.py                   # MCP server setup and startup
-└── tools/
-    ├── __init__.py
-    └── retrieval_tool.py       # get_relevant_chunks(topic) tool definition
-
-vector_db/
-│
-├── __init__.py
-├── chroma_client.py            # ChromaDB connection and collection setup
-├── embedder.py                 # converts text chunks into vector embeddings
-├── docling_parser.py           # parse documents (PDF/DOCX/PPTX/MD/HTML/images) via Docling
-├── chunking.py                 # HybridChunker (default) / semantic chunking strategies
-├── loaders.py                  # audio/video transcription (ASR)
-├── youtube.py                  # YouTube transcript fetch (free) + playlist + audio fallback
-├── notion.py                   # normalize a Notion page payload → ingestible text
-├── enrichment.py               # opt-in web enrichment: search → propose → approve → ingest (source_type=web)
-├── ingestion.py                # routes files/urls/text → parse/transcribe → chunk → embeds → stores
-└── retriever.py                # semantic search logic used by retrieval_tool
+schemas/note_chunk.py            # NoteChunk — the only object that crosses to Teams B & C
+config/settings.py              # all .env config
+tests/team_a/                    # pytest suite for everything above
 ```
 
 ---
 
-## Team B — Exam Creation
+## Where we sit in the system
 
-```
-agents/
-│
-├── __init__.py
-├── generator_agent.py          # Agent 1 — generates exam from note chunks
-└── validator_agent.py          # Agent 2 — validates questions against notes
+```mermaid
+flowchart LR
+    subgraph SRC["Inputs (a student supplies)"]
+        F["Files: PDF / DOCX / PPTX<br/>MD / HTML / images"]
+        M["Media: mp3 / wav / m4a / mp4"]
+        Y["YouTube video / playlist URL"]
+        N["Notion page (student's own MCP)"]
+        W["Web enrichment (opt-in)"]
+    end
 
-graph/
-│
-├── __init__.py
-├── exam_graph.py               # LangGraph state machine definition
-├── nodes.py                    # each graph node (generate, validate, route)
-├── edges.py                    # conditional edges (approve vs reject routing)
-└── state.py                    # ExamState definition — shared graph state
-```
+    subgraph TEAMA["TEAM A — Infrastructure"]
+        ING["ingestion.py<br/>(router)"]
+        STORE[("ChromaDB<br/>per-session store")]
+        RET["retriever.py"]
+        MCP{{"MCP server 'leo-notes'<br/>get_relevant_chunks / get_chunk_by_id"}}
+    end
 
----
+    subgraph CONSUMERS["Other teams"]
+        B["Team B<br/>Exam generation"]
+        C["Team C<br/>Grading & feedback"]
+    end
 
-## Team C — Grading and Feedback
-
-```
-agents/
-│
-├── corrector_agent.py          # Agent 3 — grades answers, pulls chunks, gives feedback
-
-ui/
-│
-├── __init__.py
-├── app.py                      # main UI entry point (Streamlit or CLI)
-├── pages/
-│   ├── upload_page.py          # student uploads notes and topics
-│   ├── exam_page.py            # student sees exam and submits answers
-│   └── feedback_page.py        # student sees feedback report
-└── components/
-    ├── question_card.py        # renders a single question
-    └── feedback_card.py        # renders per-question feedback result
+    F --> ING
+    M --> ING
+    Y --> ING
+    N --> ING
+    W --> ING
+    ING --> STORE
+    STORE --> RET
+    RET --> MCP
+    MCP -->|"NoteChunk[]"| B
+    MCP -->|"NoteChunk[]"| C
 ```
 
----
-
-## Shared — Schemas
-
-```
-schemas/
-│
-├── __init__.py
-├── note_chunk.py               # NoteChunk schema
-├── exam_object.py              # ExamObject + Question schema
-└── feedback_report.py          # FeedbackReport + QuestionResult schema
-```
-
-### Schema definitions
+**The contract** is `NoteChunk` — that's all Teams B and C ever see:
 
 ```python
-# schemas/note_chunk.py
-class NoteChunk:
-    chunk_id   : str
-    topic      : str
-    content    : str
-    session_id : str
-
-# schemas/exam_object.py
-class Question:
-    question_id      : str
-    topic            : str
-    question         : str
-    correct_answer   : str
-    source_chunk_id  : str
-
-class ExamObject:
-    session_id : str
-    topics     : list[str]
-    status     : str          # draft | validated
-    questions  : list[Question]
-
-# schemas/feedback_report.py
-class QuestionResult:
-    question_id    : str
-    question       : str
-    student_answer : str
-    is_correct     : bool
-    explanation    : str
-    source_chunk   : str
-
-class FeedbackReport:
-    session_id        : str
-    score             : int
-    topics_to_review  : list[str]
-    encouragement     : str
-    results           : list[QuestionResult]
+class NoteChunk(BaseModel):     # schemas/note_chunk.py
+    chunk_id: str
+    topic: str
+    content: str
+    session_id: str
 ```
+
+Page numbers, slide numbers, headings, and timestamps are kept as **internal Chroma metadata** only;
+they never leak into the contract.
 
 ---
 
-## Shared — Tests
+## Ingestion: how any input becomes chunks
+
+`ingestion.py` is a router. It looks at *what kind of thing* you handed it and sends it down one of
+four paths, but every path ends the same way — chunks written to the session's Chroma collection.
+
+```mermaid
+flowchart TD
+    START(["ingest_file / ingest_url / ingest_text"]) --> ROUTE{"input type?"}
+
+    ROUTE -->|"document ext<br/>(.pdf .docx .pptx<br/>.md .txt .html .img)"| DOC["docling_parser.parse()<br/>→ DoclingDocument"]
+    ROUTE -->|"media ext<br/>(.mp3 .wav .m4a .mp4)"| MED["loaders.load_media()<br/>→ TextUnit[] (ASR)"]
+    ROUTE -->|"YouTube URL"| YT["youtube.fetch_transcript()<br/>captions → audio fallback"]
+    ROUTE -->|"raw text<br/>(Notion / web)"| TXT["docling_parser.parse_text()<br/>→ DoclingDocument"]
+
+    DOC --> CHK["chunking.chunk()"]
+    TXT --> CHK
+    CHK --> SC["_store_chunks()"]
+
+    MED --> SU["_store_units()<br/>token-split ~512 tok, overlap 64"]
+    YT --> SU
+
+    SC --> EMB
+    SU --> EMB["Chroma collection<br/>embeds each chunk"]
+    EMB --> DB[("session store<br/>upsert ids+docs+metadata")]
+```
+
+**Why two store paths?** Documents carry real structure (headings, pages, slides), so Docling's
+chunker does the splitting and we keep that provenance. Transcripts are a flat stream of timestamped
+text, so they're token-split with overlap and keep a `timestamp` instead of a page number.
+
+Every chunk gets a deterministic id and a metadata bag:
 
 ```
-tests/
-│
-├── __init__.py
-│
-├── team_a/
-│   ├── test_ingestion.py       # test note chunking and embedding
-│   ├── test_retriever.py       # test chunk retrieval by topic
-│   └── test_mcp_server.py      # test MCP tool response
-│
-├── team_b/
-│   ├── test_generator_agent.py # test exam generation with mock chunks
-│   ├── test_validator_agent.py # test validation logic (approve + reject)
-│   └── test_exam_graph.py      # test full LangGraph loop
-│
-└── team_c/
-    ├── test_corrector_agent.py # test grading logic and feedback generation
-    └── mock_data/
-        ├── mock_exam_object.json    # fake exam for testing without Team B
-        └── mock_mcp_response.json   # fake MCP chunks for testing without Team A
+id     = "{session_id}:{source_file}:{locator}:{index}"
+meta   = { topic, session_id, source_file, transcribed, source_type,
+           page|slide?, headings?, timestamp?, source_ref?, notion_page? }
 ```
+
+### Document parsing & OCR (`docling_parser.py`)
+
+Documents go through [Docling](https://docling-project.github.io/docling/), which produces a
+structure-aware `DoclingDocument`. Scanned PDFs and images are OCR'd **locally and for free** —
+`is_scanned()` checks whether a PDF actually has a text layer (via PyMuPDF) before deciding to OCR.
+
+```mermaid
+flowchart LR
+    P["parse(path)"] --> SCAN{"is_scanned?<br/>(image, or PDF<br/>w/o text layer)"}
+    SCAN -->|yes| OCR["Docling + RapidOCR<br/>(free, local, no key)"]
+    SCAN -->|no| TEXT["Docling text-layer parse"]
+    OCR --> D["DoclingDocument"]
+    TEXT --> D
+```
+
+`DOCLING_OCR_ENGINE` picks `rapidocr` (default), `easyocr`, or `tesseract`. Handwriting is
+best-effort — a hosted vision-LLM OCR is the noted future upgrade.
+
+### Chunking (`chunking.py`)
+
+```mermaid
+flowchart TD
+    C["chunk(dl_doc)"] --> MODE{"CHUNK_MODE"}
+
+    MODE -->|"hybrid (default)"| H["HybridChunker<br/>tokenizer = tiktoken for EMBEDDING_MODEL<br/>max_tokens = CHUNK_MAX_TOKENS, merge_peers"]
+    H --> CTX["contextualize(chunk)<br/>prepend heading breadcrumbs"]
+
+    MODE -->|"semantic (opt-in)"| S["HierarchicalChunker → embed each unit<br/>group adjacent units while<br/>cosine ≥ SEMANTIC_SIM_THRESHOLD<br/>and tokens ≤ CHUNK_MAX_TOKENS"]
+
+    CTX --> OUT["Chunk[] (content + page + headings)"]
+    S --> OUT
+```
+
+The crucial detail: the **stored text is the `contextualize()` output** — the chunk with its
+heading/section breadcrumbs prepended. So the text we embed and the text we store are identical and
+both carry structural context. (Semantic mode reuses the OpenAI embedder at ingest time, so it costs
+API calls; hybrid is the free default.)
+
+### Media & YouTube (`loaders.py`, `youtube.py`)
+
+```mermaid
+flowchart TD
+    subgraph MEDIA["local media"]
+        V[".mp4"] -->|"VIDEO_ENABLED=true"| EX["extract audio (ffmpeg)"]
+        EX --> A
+        AU[".mp3/.wav/.m4a"] --> A["_transcribe()"]
+        A -->|"ASR_PROVIDER=local"| FW["faster-whisper (no key)"]
+        A -->|"ASR_PROVIDER=groq"| GQ["Groq Whisper v3 Turbo (key)"]
+        FW --> TU
+        GQ --> TU["TextUnit[] (~800-char windows + timestamps)"]
+    end
+
+    subgraph YOUTUBE["youtube url"]
+        URL["parse_target(url)"] --> KIND{"video or playlist?"}
+        KIND -->|playlist| PL["yt-dlp enumerate<br/>cap YOUTUBE_PLAYLIST_MAX"]
+        PL --> VID
+        KIND -->|video| VID["fetch_transcript()"]
+        VID --> CAP{"captions exist?"}
+        CAP -->|yes| CY["youtube-transcript-api (free)"]
+        CAP -->|"no + YOUTUBE_ASR_FALLBACK"| DL["yt-dlp download audio → _transcribe()"]
+    end
+```
+
+Transcribed sources (scanned docs, recordings, auto-captions, the audio fallback) are flagged
+`transcribed=true` — downstream knows that text is approximate.
+
+### Notion & web enrichment
+
+**Notion** (`notion.py`) never holds an API key. The student's *own* Notion MCP fetches the page; we
+just normalize the returned block payload into markdown and hand it to `ingest_text`.
+
+**Web enrichment** (`enrichment.py`) is **opt-in and off by default** (`ENRICH_ENABLED=false`). With
+it off, nothing here touches the network. When on, it's a human-in-the-loop flow:
+
+```mermaid
+sequenceDiagram
+    participant U as Student
+    participant E as enrichment.py
+    participant DB as Session store
+    participant Net as Web (ddgs / trafilatura)
+
+    U->>E: propose(enabled=true)
+    E->>DB: derive_queries() from own topics<br/>(skip source_type="web")
+    E->>Net: ddgs search per topic
+    Net-->>E: candidate pages
+    E-->>U: Proposal[] (capped at ENRICH_MAX_DOCS)
+    U->>E: ingest_approved(approved)
+    loop each approved page
+        E->>Net: trafilatura fetch + extract main text
+        E->>DB: ingest_text(source_type="web")
+    end
+    Note over DB: web chunks are tagged, listable,<br/>and removable without touching own notes
+```
+
+`list_enrichment()` and `remove_enrichment()` let the student see and wipe enriched material
+separately — it never contaminates their own notes.
 
 ---
 
-## Environment Variables
+## Storage: session isolation (`chroma_client.py`)
 
+Isolation is **physical, not a filter**. Each `SESSION_ID` maps to its own on-disk directory and its
+own `PersistentClient`, so two sessions (e.g. two terminals) can never see or overwrite each other.
+
+```mermaid
+flowchart TD
+    S1["SESSION_ID = alice"] --> C1["PersistentClient<br/>CHROMA_PERSIST_DIR/alice_&lt;hash&gt;/"]
+    S2["SESSION_ID = bob"] --> C2["PersistentClient<br/>CHROMA_PERSIST_DIR/bob_&lt;hash&gt;/"]
+    C1 --> COL1[("collection 'student_notes'<br/>+ embedding fn")]
+    C2 --> COL2[("collection 'student_notes'<br/>+ embedding fn")]
 ```
-# .env.example
 
-# LLM
-OPENAI_API_KEY=your_openai_key_here
-MODEL_NAME=gpt-4o
+The embedding function is attached to the **collection**, so indexing and querying always use the
+same model — they cannot drift apart. `EMBEDDING_PROVIDER=auto` tries OpenAI and falls back to a
+local sentence-transformers model if the key is missing or fails a healthcheck.
 
-# ChromaDB
-CHROMA_PERSIST_DIR=./chroma_db
-CHROMA_COLLECTION_NAME=student_notes
-
-# MCP Server
-MCP_SERVER_HOST=localhost
-MCP_SERVER_PORT=8000
-
-# Session
-SESSION_RESET_ON_START=true
-
-# UI
-UI_PORT=8501
-```
+`SESSION_RESET_ON_START=true` clears only the bound session's store on startup.
 
 ---
 
-## Requirements
+## Retrieval: how a topic becomes ranked chunks (`retriever.py`)
 
+The default `RETRIEVAL_MODE=hybrid` is a four-stage funnel. `dense` mode skips straight to the vector
+query.
+
+```mermaid
+flowchart TD
+    Q(["search(topic, top_k)"]) --> EMPTY{"collection empty?"}
+    EMPTY -->|yes| NONE["return []"]
+    EMPTY -->|no| MODE{"RETRIEVAL_MODE"}
+
+    MODE -->|dense| DQ["Chroma vector query<br/>(session-filtered) → top_k"]
+    DQ --> RES
+
+    MODE -->|hybrid| POOL["pull session corpus"]
+    POOL --> D2["dense vector query → candidate ids"]
+    POOL --> BM["BM25 lexical rank → candidate ids"]
+    D2 --> RRF["RRF fuse the two rankings<br/>(k=60)"]
+    BM --> RRF
+    RRF --> RR["CrossEncoder rerank<br/>(ms-marco-MiniLM-L-6-v2)"]
+    RR --> CUT{"RERANK_MIN_SCORE?"}
+    CUT --> TOPK["take top_k"]
+    TOPK --> RES["NoteChunk[]"]
 ```
-# requirements.txt
 
-# LLM and agents
-langchain
-langchain-openai
-langchain-community
-langgraph
-openai
+- **Dense** catches meaning ("photosynthesis" ≈ "how plants make food").
+- **BM25** catches exact terms the embedder might smear (codes, names, formulae).
+- **RRF** fuses both rankings without needing comparable scores.
+- **Rerank** is the precision pass — a cross-encoder reads `(query, chunk)` pairs directly.
 
-# MCP
-mcp
-
-# Vector DB
-chromadb
-
-# Embeddings
-sentence-transformers
-
-# UI
-streamlit
-
-# Schemas and validation
-pydantic
-
-# Environment
-python-dotenv
-
-# Testing
-pytest
-```
+`search_debug()` returns the ids at every stage (`dense`, `bm25`, `fused`, `reranked`, `final`) — use
+it when a result looks wrong. `RERANK_ENABLED`, `RERANK_MIN_SCORE`, and `RETRIEVAL_CANDIDATE_K` tune
+the funnel.
 
 ---
 
-## Config
+## The MCP gateway (`mcp_server/`)
 
-```python
-# config/settings.py
+```mermaid
+sequenceDiagram
+    participant T as Team B / Team C
+    participant MCP as FastMCP "leo-notes"
+    participant R as retriever.py
+    participant DB as Session store
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY")
-MODEL_NAME           = os.getenv("MODEL_NAME", "gpt-4o")
-CHROMA_PERSIST_DIR   = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-CHROMA_COLLECTION    = os.getenv("CHROMA_COLLECTION_NAME", "student_notes")
-MCP_HOST             = os.getenv("MCP_SERVER_HOST", "localhost")
-MCP_PORT             = int(os.getenv("MCP_SERVER_PORT", 8000))
-SESSION_RESET        = os.getenv("SESSION_RESET_ON_START", "true") == "true"
-UI_PORT              = int(os.getenv("UI_PORT", 8501))
+    Note over MCP,DB: start_mcp_server() → init_collection()<br/>(reset if SESSION_RESET_ON_START)
+    T->>MCP: get_relevant_chunks(topic, top_k)
+    MCP->>R: search(topic, session_id=SESSION_ID)
+    R->>DB: query + fuse + rerank
+    DB-->>R: chunks
+    R-->>MCP: NoteChunk[]
+    MCP-->>T: NoteChunk[]
+    T->>MCP: get_chunk_by_id(chunk_id)
+    MCP-->>T: NoteChunk | null
 ```
+
+Two tools, that's the whole public surface:
+
+| Tool | Returns |
+|------|---------|
+| `get_relevant_chunks(topic, top_k=5)` | ranked `NoteChunk[]` for a topic |
+| `get_chunk_by_id(chunk_id)` | one `NoteChunk` (or `None`) — for citing a source chunk |
 
 ---
 
-## Main Entry Point
-
-```python
-# main.py
-
-from config.settings import MCP_HOST, MCP_PORT
-from mcp_server.server import start_mcp_server
-from graph.exam_graph import run_exam_pipeline
-from ui.app import start_ui
-
-if __name__ == "__main__":
-    start_mcp_server(host=MCP_HOST, port=MCP_PORT)
-    start_ui()
-```
-
----
-
-## File Ownership by Team
-
-```
-TEAM A owns:
-  mcp_server/
-  vector_db/
-  tests/team_a/
-
-TEAM B owns:
-  agents/generator_agent.py
-  agents/validator_agent.py
-  graph/
-  tests/team_b/
-
-TEAM C owns:
-  agents/corrector_agent.py
-  ui/
-  tests/team_c/
-  tests/team_c/mock_data/
-
-ALL TEAMS own:
-  schemas/           ← agree on this first before writing anything
-  requirements.txt   ← each team adds their dependencies
-  .env.example       ← each team adds their required variables
-  README.md          ← each team documents their module
-```
-
----
-
-## Setup Instructions
-
-```
-# 1. clone the repo
-git clone https://github.com/your-team/classroom-exam-agent
-cd classroom-exam-agent
-
-# 2. create virtual environment
-python -m venv venv
-source venv/bin/activate        # mac / linux
-venv\Scripts\activate           # windows
-
-# 3. install dependencies
-pip install -r requirements.txt
-
-# 4. set up environment variables
-cp .env.example .env
-# open .env and fill in your API keys
-
-# 5. run the project
-python main.py
-```
-
----
-
-## Git Branch Strategy
-
-```
-main              ← stable, working code only
-  │
-  ├── team-a      ← Team A working branch
-  ├── team-b      ← Team B working branch
-  └── team-c      ← Team C working branch (your branch)
-
-Rule: never push directly to main
-      open a pull request and get one review before merging
-```
-
----
-
-## Team A: Infrastructure
-
-Team A handles ingestion and retrieval: read student notes into a local ChromaDB store and
-expose them to the other teams through one MCP tool. Design notes live in
-`specs/001-notes-ingestion-retrieval/`, `specs/002-multi-format-ingestion/`,
-`specs/003-docling-parsing-chunking/`, `specs/004-session-isolation/`,
-`specs/005-external-source-connectors/`, and `specs/006-web-enrichment-agent/`.
-
-### Supported inputs
-
-Documents are parsed by [Docling](https://docling-project.github.io/docling/) into a structure-aware
-representation; audio/video are transcribed.
-
-| Input | Handling |
-|-------|----------|
-| PDF (text layer) | Docling reads the text layer; embedded figures are OCR'd by region |
-| PDF (scanned / handwritten) | Docling OCR via RapidOCR (free, local, no key; handwriting best-effort) |
-| Word (`.docx`), PowerPoint (`.pptx`), HTML | Docling structure-aware parse (slides carry slide provenance) |
-| Markdown, plain text | Docling parse (headings preserved) |
-| Images (`.png`, `.jpg`, …) | Docling OCR |
-| Audio (`.mp3`, `.wav`, `.m4a`) | speech-to-text (faster-whisper / Groq) |
-| Video (`.mp4`) | audio extracted then transcribed (set `VIDEO_ENABLED=true`) |
-| YouTube video / playlist URL | free captions via `youtube-transcript-api` (no key); playlists enumerated with `yt-dlp`; no-caption videos fall back to the ASR pipeline above |
-| Notion page | fetched by the student's connected **Notion MCP** (their OAuth), normalized to text — Team A keeps no Notion key/SDK |
-| Web enrichment (**opt-in, default off**) | free no-key search (`ddgs`) over the student's own topics → student approves pages → `trafilatura` extracts main text; stored `source_type="web"`, listable and removable without touching own material |
-
-Scanned PDFs, images, recordings, auto-generated captions, and the YouTube audio fallback are
-transcribed and approximate.
-
-### Pipeline
-
-1. Route the file: documents → Docling parse; audio/video → transcription.
-2. Chunk documents with Docling's **HybridChunker** (tokenizer-aligned to the embedding model). Each
-   chunk's stored text is the `contextualize()` output — its heading/section breadcrumbs prepended —
-   so the embedded text and the stored text are the same and carry their structural context.
-   `CHUNK_MODE=semantic` switches to embedding-similarity chunking (opt-in). Audio transcripts are
-   token-split.
-3. Store chunks in a ChromaDB collection; the collection's embedding function turns each chunk into a
-   vector. Page / slide / heading / timestamp provenance is kept as internal metadata only.
-4. Read back through `get_relevant_chunks(topic)`. Nothing else reads the DB directly.
-
-### Modules
+## Module responsibilities
 
 | File | Responsibility |
 |------|----------------|
-| `schemas/note_chunk.py` | `NoteChunk` model (`chunk_id, topic, content, session_id`) |
-| `config/settings.py` | Loads `.env` config |
-| `vector_db/embedder.py` | Builds the embedding function (OpenAI or local) |
-| `vector_db/chroma_client.py` | Client, collection, `reset_collection()` |
-| `vector_db/docling_parser.py` | Parse documents to a `DoclingDocument` (RapidOCR for scans/images) |
-| `vector_db/chunking.py` | `chunk()` — HybridChunker (default) or semantic strategy → `Chunk`s |
-| `vector_db/loaders.py` | Audio/video transcription (ASR providers) |
-| `vector_db/youtube.py` | `parse_target()`, `fetch_transcript()`, `list_playlist()`, `audio_fallback()` |
-| `vector_db/notion.py` | `normalize_page()` — Notion page payload → text + provenance |
-| `vector_db/enrichment.py` | opt-in web enrichment: `propose()` / `ingest_approved()` / `list_enrichment()` / `remove_enrichment()` |
-| `vector_db/ingestion.py` | `ingest_file()`, `ingest_url()`, `ingest_text()`, plus `chunk_pdf()` / `ingest_pdf()` |
-| `vector_db/retriever.py` | `search()` and `search_debug()` |
-| `mcp_server/tools/retrieval_tool.py` | `get_relevant_chunks` tool |
-| `mcp_server/server.py` | FastMCP app and `start_mcp_server()` |
+| `schemas/note_chunk.py` | `NoteChunk` model — the cross-team contract |
+| `config/settings.py` | loads `.env`, exposes config constants |
+| `vector_db/embedder.py` | builds the embedding function (OpenAI / local / auto) |
+| `vector_db/chroma_client.py` | per-session client + collection, `reset_collection()` |
+| `vector_db/docling_parser.py` | parse documents → `DoclingDocument`; RapidOCR for scans/images |
+| `vector_db/chunking.py` | `chunk()` — HybridChunker (default) or semantic |
+| `vector_db/loaders.py` | audio/video transcription (faster-whisper / Groq) |
+| `vector_db/youtube.py` | `parse_target` / `fetch_transcript` / `list_playlist` / `audio_fallback` |
+| `vector_db/notion.py` | `normalize_page()` — Notion payload → markdown text |
+| `vector_db/enrichment.py` | opt-in web `propose` / `ingest_approved` / `list` / `remove` |
+| `vector_db/ingestion.py` | `ingest_file` / `ingest_url` / `ingest_text` router |
+| `vector_db/retriever.py` | `search` / `search_debug` / `get_by_id` |
+| `mcp_server/tools/retrieval_tool.py` | the two MCP tools |
+| `mcp_server/server.py` | FastMCP app + `start_mcp_server()` |
 
-### Run
+---
 
-```
-python -m venv venv && venv\Scripts\activate
+## Run it
+
+```bash
+python -m venv venv && venv\Scripts\activate     # Windows
 pip install -r requirements.txt
-cp .env.example .env
-pytest tests/team_a
-python -m mcp_server.server
-streamlit run sandbox/app.py
+cp .env.example .env                              # fill in keys (all optional — free local defaults)
+
+pytest tests/team_a                               # run our test suite
+python -m mcp_server.server                       # start the MCP gateway
+streamlit run sandbox/app.py                      # optional ingest/search playground
 ```
 
-### For Teams B and C
+---
 
-Call `get_relevant_chunks(topic)` and use the returned list of `NoteChunk`. Don't read
-ChromaDB directly. Mock against the contracts in
+## Configuration (`.env`)
+
+| Group | Key | Default | Notes |
+|-------|-----|---------|-------|
+| Embeddings | `EMBEDDING_PROVIDER` | `auto` | `openai` / `local` / `auto` (auto falls back to local) |
+| | `EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI model |
+| | `LOCAL_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | sentence-transformers fallback |
+| Storage | `CHROMA_PERSIST_DIR` | `./chroma_db` | per-session subdirs created underneath |
+| | `CHROMA_COLLECTION_NAME` | `student_notes` | |
+| Chunking | `CHUNK_MODE` | `hybrid` | `hybrid` (structure) / `semantic` (similarity, opt-in) |
+| | `CHUNK_MAX_TOKENS` | `512` | per-chunk token budget |
+| | `MIN_CHUNK_CHARS` | `0` | drop tiny chunks |
+| OCR | `DOCLING_DO_OCR` | `true` | toggle document OCR |
+| | `DOCLING_OCR_ENGINE` | `rapidocr` | `rapidocr` / `easyocr` / `tesseract` |
+| | `DOCLING_BITMAP_AREA_THRESHOLD` | `0.05` | how aggressively embedded figures are OCR'd |
+| ASR | `ASR_PROVIDER` | `local` | `local` (faster-whisper, no key) / `groq` |
+| | `VIDEO_ENABLED` | `false` | enable `.mp4` ingestion |
+| YouTube | `YOUTUBE_ASR_FALLBACK` | `true` | transcribe when no captions exist |
+| | `YOUTUBE_PLAYLIST_MAX` | `50` | playlist enumeration cap |
+| Retrieval | `RETRIEVAL_MODE` | `hybrid` | `hybrid` / `dense` |
+| | `RETRIEVAL_TOP_K` | `5` | results returned |
+| | `RETRIEVAL_CANDIDATE_K` | `20` | candidate pool before rerank |
+| | `RERANK_ENABLED` | `true` | cross-encoder rerank |
+| | `RERANK_MIN_SCORE` | _(off)_ | drop weak results |
+| Enrichment | `ENRICH_ENABLED` | `false` | opt-in web enrichment |
+| | `ENRICH_MAX_DOCS` | `10` | cap on enriched pages |
+| Session | `SESSION_ID` | `default` | binds the process to one session |
+| | `SESSION_RESET_ON_START` | `true` | clear this session's store on start |
+
+---
+
+## For Teams B and C
+
+Call `get_relevant_chunks(topic)` and use the returned `NoteChunk[]`. **Do not read ChromaDB
+directly** — the MCP server is the only gateway (frozen contract). Mock against
 `specs/001-notes-ingestion-retrieval/contracts/`.
-
-### Configuration notes
-
-- Embeddings are computed inside the Chroma collection, so indexing and querying always use
-  the same model.
-- `EMBEDDING_PROVIDER` is `openai`, `local`, or `auto`. `auto` uses OpenAI when the key works
-  and falls back to a local sentence-transformers model otherwise. Groq has no embedding
-  models, so it is not an option for this layer.
-- `RETRIEVAL_MODE` is `hybrid` by default (dense vectors + BM25, fused with RRF, then reranked).
-  Set it to `dense` for vector-only search.
-- `RERANK_MIN_SCORE` drops weak results and `MIN_CHUNK_CHARS` drops tiny chunks; both are off
-  by default.
-- `CHUNK_MODE` is `hybrid` (structure-aware, default) or `semantic` (embedding-similarity, opt-in;
-  reuses the OpenAI embedder at ingest). `CHUNK_MAX_TOKENS` sets the per-chunk token budget.
-- Document OCR is free and local via Docling: `DOCLING_OCR_ENGINE` is `rapidocr` (default), `easyocr`,
-  or `tesseract`; `DOCLING_DO_OCR` toggles it; `DOCLING_BITMAP_AREA_THRESHOLD` tunes how aggressively
-  embedded figures are OCR'd. Handwriting is best-effort (a hosted vision-LLM OCR is the future upgrade).
-- `ASR_PROVIDER` is `local` (faster-whisper) or `groq` (Whisper v3 Turbo); hosted needs `GROQ_API_KEY`,
-  local needs no key.
-- `SESSION_ID` binds a running process to one session. Each session keeps its own private store under
-  `CHROMA_PERSIST_DIR/<session>/`, so two sessions (separate terminals) never see or overwrite each
-  other's notes. `get_relevant_chunks(topic)` reads only the bound session's store; the signature is
-  unchanged. Serving many sessions from one process at once is a future upgrade (Chroma client/server).
-- `SESSION_RESET_ON_START` clears only the bound session's store on start; `session_id` also tags every chunk.
-

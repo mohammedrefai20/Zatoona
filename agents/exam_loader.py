@@ -23,11 +23,13 @@ def _mock_exam_load() -> ExamObject:
     return ExamObject(**data)
 
 def _real_exam_load(
-    session_id: str,
-    topics: list[str],
-    num_questions: int = None,
+    session_id: str = "test-session-001",
+    topics: list[str] = None,
+    num_questions: int = 3,
     difficult: bool = False
 ) -> ExamObject:
+    if topics is None:
+        topics = ["ai", "python"]
     from graph.exam_graph import run_exam_pipeline
     return run_exam_pipeline(
         session_id=session_id,

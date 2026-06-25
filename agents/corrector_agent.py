@@ -4,15 +4,16 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 from schemas.exam_object import ExamObject, Question
 from schemas.feedback_report import FeedbackReport, QuestionResult
-from config.settings import GROQ_API_KEY, MODEL_NAME
+from config.settings import GROQ_API_KEY, GROQ_MODEL
 from mcp_server.mcp_client import get_chunk_by_id
 
 # ── LLM setup ───────────────────────────────────────────────
 # one shared LLM instance used for all grading calls
-llm = ChatGroq(
-    api_key=GROQ_API_KEY,
-    model_name=MODEL_NAME
-)
+def _get_llm():
+    return ChatGroq(
+        api_key=GROQ_API_KEY,
+        model_name=GROQ_MODEL
+    )
 
 # ── helpers ─────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ def _grade_answer(
     If correct, give a short confirmation.
     """
 
-    response = llm.invoke([
+    response = _get_llm().invoke([
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt)
     ])
@@ -76,23 +77,23 @@ def _generate_encouragement(score: int, total: int, topics_to_review: list[str])
     Be warm and positive.
     """
 
-    response = llm.invoke([HumanMessage(content=user_prompt)])
+    response = _get_llm().invoke([HumanMessage(content=user_prompt)])
     return response.content.strip()
 
 # ── main corrector function ──────────────────────────────────
 def run_corrector(
-    mcp_tool=get_chunk_by_id,
-    exam_path: str    = None,
-    answers_path: str = None,
-    exam: ExamObject  = None,
-    answers: dict     = None
+    exam_path: str       = None,
+    answers_path: str    = None,
+    exam: ExamObject     = None,
+    answers: dict        = None,
+    session_id: str      = None,
+    topics: list[str]    = None
 ) -> FeedbackReport:
 
     # accept either a preloaded object or load from file
     if exam is None:
         from agents.exam_loader import load_exam
-        exam = load_exam() if exam_path is None else ExamObject(**_load_json(exam_path))
-
+        exam = load_exam(session_id=session_id, topics=topics) if exam_path is None else ExamObject(**_load_json(exam_path))
     if answers is None:
         from agents.answer_loader import load_answers
         answers = load_answers() if answers_path is None else _load_json(answers_path)

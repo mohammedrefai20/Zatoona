@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 
 from config import settings
-from vector_db import chroma_client, embedder, retriever
-from vector_db.ingestion import ingest_file
+from vector_db import chroma_client, embedder, enrichment, retriever
+from vector_db.ingestion import ingest_file, ingest_text, ingest_url
 from mcp_server.tools.retrieval_tool import get_relevant_chunks, get_chunk_by_id
 
 st.set_page_config(page_title="Notes Sandbox", layout="wide")
@@ -86,10 +86,115 @@ if uploaded and st.button("Ingest"):
             loc = f"t={meta['timestamp']}s"
         else:
             loc = ""
-        badge = " · transcribed" if meta.get("transcribed") else ""
+        stype = meta.get("source_type", "file")
+        badge = (f" · {stype}" if stype != "file" else "")
+        badge += " · transcribed" if meta.get("transcribed") else ""
         headings = f"  ·  {meta['headings']}" if meta.get("headings") else ""
         with st.expander(f"{cid}  ·  {loc}{badge}{headings}"):
             st.write(doc)
+
+
+st.header("1b) Add external sources")
+
+
+def render_youtube_result(result):
+    if isinstance(result, int):
+        if result:
+            st.success(f"Stored {result} chunk(s) from the video.")
+        else:
+            st.warning("No usable transcript (captions absent and ASR fallback off or unavailable).")
+        return
+    ingested = [o for o in result if o["status"] == "ingested"]
+    st.success(f"Playlist: {len(ingested)} video(s) ingested.")
+    for o in result:
+        if o["status"] == "ingested":
+            st.write(f"✅ {o['ref']} — {o['stored_count']} chunk(s)")
+        elif o["status"] == "capped":
+            st.info(o["reason"])
+        else:
+            st.write(f"⏭️ {o['ref']} — skipped: {o['reason']}")
+
+
+yt_url = st.text_input("Add a link (YouTube video or playlist)", value="")
+if st.button("Add link") and yt_url.strip():
+    try:
+        with st.spinner("Fetching transcript(s)..."):
+            render_youtube_result(ingest_url(yt_url.strip(), topic=topic, session_id=session_id))
+    except Exception as exc:
+        st.error(f"{yt_url}: {exc}")
+st.caption("YouTube transcripts are fetched free (no API key). Auto-generated captions and the "
+           "audio fallback are approximate and flagged 'transcribed'. A playlist link ingests every "
+           "video with a per-video outcome.")
+
+with st.expander("Add a Notion page (paste its text)"):
+    st.caption("In normal use the connected Notion MCP fetches the page; paste here to test the path.")
+    n_title = st.text_input("Page title", value="", key="notion_title")
+    n_ref = st.text_input("Page link or id (provenance)", value="", key="notion_ref")
+    n_text = st.text_area("Page text", value="", key="notion_text")
+    if st.button("Add Notion text") and n_text.strip():
+        title = n_title or "Notion page"
+        try:
+            stored = ingest_text(n_text, n_ref or title, topic=topic, session_id=session_id,
+                                 source_type="notion", title=title)
+            if stored:
+                st.success(f"Stored {stored} chunk(s) from Notion page '{title}'.")
+            else:
+                st.warning("No usable text found on that page.")
+        except Exception as exc:
+            st.error(f"Notion: {exc}")
+
+
+st.header("1c) Web enrichment (opt-in, default off)")
+enrich_on = st.checkbox(
+    "Enable web enrichment for this session",
+    value=settings.ENRICH_ENABLED,
+    help="Default off. When on, searches the web (free, no key) for the topics in your own sources and "
+         "proposes pages to review. Nothing is stored until you approve it; enrichment is labelled "
+         "source_type=web and can be removed without touching your own material.",
+)
+
+if st.button("Propose sources"):
+    if not enrich_on:
+        st.info("Enable web enrichment first.")
+    else:
+        try:
+            with st.spinner("Searching the web for your topics..."):
+                st.session_state["proposals"] = enrichment.propose(session_id, enabled=True)
+            if not st.session_state["proposals"]:
+                st.warning("Nothing suitable found — add your own sources first, or no good matches.")
+        except Exception as exc:
+            st.error(f"Search unavailable: {exc}")
+
+proposals = st.session_state.get("proposals", [])
+if proposals:
+    st.write(f"{len(proposals)} proposed source(s) — tick the ones to add:")
+    picks = []
+    for i, p in enumerate(proposals):
+        picks.append(st.checkbox(f"{p.title}  ·  _{p.topic}_", key=f"prop_{i}"))
+        st.caption(f"{p.url} — {p.snippet}")
+    if st.button("Add approved"):
+        approved = [p for p, picked in zip(proposals, picks) if picked]
+        if not approved:
+            st.info("No proposals selected.")
+        else:
+            with st.spinner(f"Fetching and ingesting {len(approved)} page(s)..."):
+                outcomes = enrichment.ingest_approved(approved, session_id, enabled=enrich_on)
+            for o in outcomes:
+                if o["status"] == "ingested":
+                    st.success(f"✅ {o['url']} — {o['stored_count']} chunk(s)")
+                else:
+                    st.write(f"⏭️ {o['url']} — skipped: {o['reason']}")
+            st.session_state["proposals"] = []
+
+enrichment_items = enrichment.list_enrichment(session_id)
+if enrichment_items:
+    st.caption(f"Enrichment in this session — {len(enrichment_items)} chunk(s), labelled source_type=web:")
+    for item in enrichment_items:
+        st.write(f"· {item['title'] or item['url']}  —  {item['url']}")
+    if st.button("Remove enrichment"):
+        removed = enrichment.remove_enrichment(session_id)
+        st.success(f"Removed {removed} enrichment chunk(s); your own material is untouched.")
+        st.rerun()
 
 
 st.header("2) Retrieve by topic")

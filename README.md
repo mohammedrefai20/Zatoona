@@ -47,7 +47,10 @@ vector_db/
 ├── docling_parser.py           # parse documents (PDF/DOCX/PPTX/MD/HTML/images) via Docling
 ├── chunking.py                 # HybridChunker (default) / semantic chunking strategies
 ├── loaders.py                  # audio/video transcription (ASR)
-├── ingestion.py                # routes files → parse/transcribe → chunk → embeds → stores
+├── youtube.py                  # YouTube transcript fetch (free) + playlist + audio fallback
+├── notion.py                   # normalize a Notion page payload → ingestible text
+├── enrichment.py               # opt-in web enrichment: search → propose → approve → ingest (source_type=web)
+├── ingestion.py                # routes files/urls/text → parse/transcribe → chunk → embeds → stores
 └── retriever.py                # semantic search logic used by retrieval_tool
 ```
 
@@ -349,8 +352,9 @@ Rule: never push directly to main
 
 Team A handles ingestion and retrieval: read student notes into a local ChromaDB store and
 expose them to the other teams through one MCP tool. Design notes live in
-`specs/001-notes-ingestion-retrieval/`, `specs/002-multi-format-ingestion/`, and
-`specs/003-docling-parsing-chunking/`.
+`specs/001-notes-ingestion-retrieval/`, `specs/002-multi-format-ingestion/`,
+`specs/003-docling-parsing-chunking/`, `specs/004-session-isolation/`,
+`specs/005-external-source-connectors/`, and `specs/006-web-enrichment-agent/`.
 
 ### Supported inputs
 
@@ -366,8 +370,12 @@ representation; audio/video are transcribed.
 | Images (`.png`, `.jpg`, …) | Docling OCR |
 | Audio (`.mp3`, `.wav`, `.m4a`) | speech-to-text (faster-whisper / Groq) |
 | Video (`.mp4`) | audio extracted then transcribed (set `VIDEO_ENABLED=true`) |
+| YouTube video / playlist URL | free captions via `youtube-transcript-api` (no key); playlists enumerated with `yt-dlp`; no-caption videos fall back to the ASR pipeline above |
+| Notion page | fetched by the student's connected **Notion MCP** (their OAuth), normalized to text — Team A keeps no Notion key/SDK |
+| Web enrichment (**opt-in, default off**) | free no-key search (`ddgs`) over the student's own topics → student approves pages → `trafilatura` extracts main text; stored `source_type="web"`, listable and removable without touching own material |
 
-Scanned PDFs, images, and recordings are transcribed and approximate.
+Scanned PDFs, images, recordings, auto-generated captions, and the YouTube audio fallback are
+transcribed and approximate.
 
 ### Pipeline
 
@@ -392,7 +400,10 @@ Scanned PDFs, images, and recordings are transcribed and approximate.
 | `vector_db/docling_parser.py` | Parse documents to a `DoclingDocument` (RapidOCR for scans/images) |
 | `vector_db/chunking.py` | `chunk()` — HybridChunker (default) or semantic strategy → `Chunk`s |
 | `vector_db/loaders.py` | Audio/video transcription (ASR providers) |
-| `vector_db/ingestion.py` | `ingest_file()`, plus `chunk_pdf()` / `ingest_pdf()` |
+| `vector_db/youtube.py` | `parse_target()`, `fetch_transcript()`, `list_playlist()`, `audio_fallback()` |
+| `vector_db/notion.py` | `normalize_page()` — Notion page payload → text + provenance |
+| `vector_db/enrichment.py` | opt-in web enrichment: `propose()` / `ingest_approved()` / `list_enrichment()` / `remove_enrichment()` |
+| `vector_db/ingestion.py` | `ingest_file()`, `ingest_url()`, `ingest_text()`, plus `chunk_pdf()` / `ingest_pdf()` |
 | `vector_db/retriever.py` | `search()` and `search_debug()` |
 | `mcp_server/tools/retrieval_tool.py` | `get_relevant_chunks` tool |
 | `mcp_server/server.py` | FastMCP app and `start_mcp_server()` |

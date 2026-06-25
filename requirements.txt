@@ -42,6 +42,17 @@ groq
 faster-whisper
 imageio-ffmpeg
 
+# External source connectors — YouTube (Team A). Both free, no API key.
+# youtube-transcript-api fetches existing captions; yt-dlp enumerates playlists
+# and downloads audio for the no-captions ASR fallback.
+youtube-transcript-api
+yt-dlp
+
+# Web enrichment agent (Team A). Both free, no API key.
+# ddgs is the DuckDuckGo search backend; trafilatura extracts clean page main-content.
+ddgs
+trafilatura
+
 # UI (Team C)
 streamlit
 

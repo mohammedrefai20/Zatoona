@@ -78,6 +78,17 @@ def parse(path):
     return result.document
 
 
+def parse_text(text, name="text"):
+    from docling.datamodel.base_models import DocumentStream
+
+    source = DocumentStream(name=f"{name}.md", stream=io.BytesIO(text.encode("utf-8")))
+    try:
+        result = _get_converter().convert(source)
+    except Exception as exc:
+        raise ValueError(f"could not parse text for {name}: {exc}") from exc
+    return result.document
+
+
 def _to_source(path, ext):
     if ext == ".txt":
         from docling.datamodel.base_models import DocumentStream

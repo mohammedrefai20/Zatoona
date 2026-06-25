@@ -32,6 +32,17 @@ ASR_MODEL = os.getenv("ASR_MODEL", "base")
 VIDEO_ENABLED = os.getenv("VIDEO_ENABLED", "false").lower() == "true"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+YOUTUBE_TRANSCRIPT_LANGS = [
+    s.strip() for s in os.getenv("YOUTUBE_TRANSCRIPT_LANGS", "en").split(",") if s.strip()
+]
+YOUTUBE_ASR_FALLBACK = os.getenv("YOUTUBE_ASR_FALLBACK", "true").lower() == "true"
+YOUTUBE_PLAYLIST_MAX = int(os.getenv("YOUTUBE_PLAYLIST_MAX", "50"))
+
+ENRICH_ENABLED = os.getenv("ENRICH_ENABLED", "false").lower() == "true"
+ENRICH_MAX_DOCS = int(os.getenv("ENRICH_MAX_DOCS", "10"))
+ENRICH_SEARCH_RESULTS = int(os.getenv("ENRICH_SEARCH_RESULTS", "5"))
+ENRICH_PROVIDER = os.getenv("ENRICH_PROVIDER", "ddgs").lower()
+
 CHUNK_MODE = os.getenv("CHUNK_MODE", "hybrid").lower()
 CHUNK_MAX_TOKENS = int(os.getenv("CHUNK_MAX_TOKENS", "512"))
 DOCLING_DO_OCR = os.getenv("DOCLING_DO_OCR", "true").lower() == "true"

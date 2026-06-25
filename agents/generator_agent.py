@@ -1,12 +1,17 @@
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
-from config.settings import MODEL_NAME, OLLAMA_BASE_URL
+from config.settings import MODEL_NAME, BASE_URL, LIGHTNING_API_KEY
 from schemas.exam_object import ExamObject, Question
 from schemas.note_chunk import NoteChunk
 
 
-def _get_llm() -> ChatOllama:
-    return ChatOllama(model=MODEL_NAME, base_url=OLLAMA_BASE_URL, temperature=0.3)
+def _get_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model=MODEL_NAME,
+        base_url=BASE_URL,
+        api_key=LIGHTNING_API_KEY,
+        temperature=0.3,
+    )
 
 
 def _format_chunks(chunks: list[NoteChunk]) -> str:

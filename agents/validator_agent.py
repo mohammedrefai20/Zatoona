@@ -1,7 +1,7 @@
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from config.settings import MODEL_NAME, OLLAMA_BASE_URL
+from config.settings import MODEL_NAME, BASE_URL, LIGHTNING_API_KEY
 from schemas.exam_object import ExamObject, ValidationResult
 from schemas.note_chunk import NoteChunk
 
@@ -16,8 +16,13 @@ class _ValidationResponse(BaseModel):
     results: list[_QuestionValidation]
 
 
-def _get_llm() -> ChatOllama:
-    return ChatOllama(model=MODEL_NAME, base_url=OLLAMA_BASE_URL, temperature=0)
+def _get_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model=MODEL_NAME,
+        base_url=BASE_URL,
+        api_key=LIGHTNING_API_KEY,
+        temperature=0,
+    )
 
 
 def _format_chunks(chunks: list[NoteChunk]) -> str:
@@ -70,7 +75,9 @@ Questions to validate:
 For each question:
 1. Verify the correct_answer is directly supported by the content of the referenced source chunk(s) listed in source_chunk_id.
 2. Verify the question is answerable from those chunk(s) alone.
-3. Mark approved=false if the answer is wrong, unsupported, or hallucinated.
+3. If the question is valid, set approved=true and provide a brief confirmation in the reason field.
+4. If the question is invalid (wrong, unsupported, hallucinated, or references an incorrect source chunk), set approved=false.
+5. For rejected questions, you MUST provide detailed, constructive, and highly actionable feedback in the reason field. Explain exactly what is wrong (e.g. what specific facts were hallucinated or unsupported by the referenced note chunk) and give concrete instructions on how the generator can rewrite it to be fully grounded in the source chunk(s).
 """
 
         response: _ValidationResponse = structured_llm.invoke(prompt)

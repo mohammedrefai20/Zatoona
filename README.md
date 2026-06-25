@@ -34,7 +34,7 @@ Leo-Agent/
 ├── exam generator and validator flow.png  # Rendered LangGraph visualization
 │
 ├── config/
-│   └── settings.py             # Config loader (Ollama URL, model configuration)
+│   └── settings.py             # Config loader (Lightning AI base URL, model configuration)
 │
 ├── agents/
 │   ├── __init__.py
@@ -68,21 +68,18 @@ Leo-Agent/
 ## Setup Instructions
 
 ### 1. Prerequisites
-- **Ollama**: Make sure Ollama is installed and running on your system (`http://localhost:11434`).
-- Pull the Qwen 2.5 7B model:
-  ```bash
-  ollama pull qwen2.5:7b
-  ```
+- **Lightning AI API Access**: Make sure you have a Lightning AI account and API key.
 
 ### 2. Configure Environment
 1. Initialize the environment file:
    ```bash
    cp .env.example .env
    ```
-2. Adjust variables in `.env` if necessary. By default, it is configured for Ollama:
+2. Adjust variables in `.env` if necessary:
    ```env
-   MODEL_NAME=qwen2.5:7b
-   OLLAMA_BASE_URL=http://localhost:11434
+   MODEL_NAME=lightning-ai/deepseek-v4-pro
+   LIGHTNING_API_KEY=your_lightning_api_key_here
+   LIGHTNING_BASE_URL=https://lightning.ai/api/v1/
    MAX_VALIDATION_ITERATIONS=3
    ```
 

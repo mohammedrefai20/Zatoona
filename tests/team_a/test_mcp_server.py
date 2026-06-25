@@ -15,6 +15,7 @@ def test_notechunk_forbids_extra_fields():
 
 def test_get_relevant_chunks_returns_list_of_notechunks(monkeypatch):
     sample = [NoteChunk(chunk_id="s1:n:0:0", topic="bio", content="cells", session_id="s1")]
+    monkeypatch.setattr(retrieval_tool.chroma_client, "get_collection", lambda sid: None)
     monkeypatch.setattr(retrieval_tool.retriever, "search", lambda *a, **k: sample)
 
     result = retrieval_tool.get_relevant_chunks("biology")
@@ -25,8 +26,25 @@ def test_get_relevant_chunks_returns_list_of_notechunks(monkeypatch):
 
 
 def test_get_relevant_chunks_empty_is_empty_list(monkeypatch):
+    monkeypatch.setattr(retrieval_tool.chroma_client, "get_collection", lambda sid: None)
     monkeypatch.setattr(retrieval_tool.retriever, "search", lambda *a, **k: [])
     assert retrieval_tool.get_relevant_chunks("nothing-here") == []
+
+
+def test_get_relevant_chunks_binds_to_session(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(retrieval_tool.settings, "SESSION_ID", "alice")
+    monkeypatch.setattr(retrieval_tool.chroma_client, "get_collection", lambda sid: f"coll::{sid}")
+
+    def fake_search(topic, top_k=None, session_id=None, collection=None):
+        captured.update(session_id=session_id, collection=collection)
+        return []
+
+    monkeypatch.setattr(retrieval_tool.retriever, "search", fake_search)
+    retrieval_tool.get_relevant_chunks("biology")
+
+    assert captured["session_id"] == "alice"
+    assert captured["collection"] == "coll::alice"
 
 
 def test_tool_registers_on_a_fastmcp_instance():
@@ -41,8 +59,8 @@ def test_init_collection_resets_when_enabled(monkeypatch):
 
     calls = []
     monkeypatch.setattr(server.settings, "SESSION_RESET", True)
-    monkeypatch.setattr(server.chroma_client, "reset_collection", lambda: calls.append("reset"))
-    monkeypatch.setattr(server.chroma_client, "get_collection", lambda: calls.append("get"))
+    monkeypatch.setattr(server.chroma_client, "reset_collection", lambda *a: calls.append("reset"))
+    monkeypatch.setattr(server.chroma_client, "get_collection", lambda *a: calls.append("get"))
 
     server.init_collection()
     assert calls == ["reset"]
@@ -53,8 +71,8 @@ def test_init_collection_reuses_when_disabled(monkeypatch):
 
     calls = []
     monkeypatch.setattr(server.settings, "SESSION_RESET", False)
-    monkeypatch.setattr(server.chroma_client, "reset_collection", lambda: calls.append("reset"))
-    monkeypatch.setattr(server.chroma_client, "get_collection", lambda: calls.append("get"))
+    monkeypatch.setattr(server.chroma_client, "reset_collection", lambda *a: calls.append("reset"))
+    monkeypatch.setattr(server.chroma_client, "get_collection", lambda *a: calls.append("get"))
 
     server.init_collection()
     assert calls == ["get"]

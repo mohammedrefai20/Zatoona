@@ -432,5 +432,9 @@ ChromaDB directly. Mock against the contracts in
   embedded figures are OCR'd. Handwriting is best-effort (a hosted vision-LLM OCR is the future upgrade).
 - `ASR_PROVIDER` is `local` (faster-whisper) or `groq` (Whisper v3 Turbo); hosted needs `GROQ_API_KEY`,
   local needs no key.
-- The collection resets each session (`SESSION_RESET_ON_START`); `session_id` tags every chunk.
+- `SESSION_ID` binds a running process to one session. Each session keeps its own private store under
+  `CHROMA_PERSIST_DIR/<session>/`, so two sessions (separate terminals) never see or overwrite each
+  other's notes. `get_relevant_chunks(topic)` reads only the bound session's store; the signature is
+  unchanged. Serving many sessions from one process at once is a future upgrade (Chroma client/server).
+- `SESSION_RESET_ON_START` clears only the bound session's store on start; `session_id` also tags every chunk.
 

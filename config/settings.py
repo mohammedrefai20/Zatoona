@@ -39,6 +39,7 @@ DOCLING_OCR_ENGINE = os.getenv("DOCLING_OCR_ENGINE", "rapidocr").lower()
 DOCLING_BITMAP_AREA_THRESHOLD = float(os.getenv("DOCLING_BITMAP_AREA_THRESHOLD", "0.05"))
 SEMANTIC_SIM_THRESHOLD = float(os.getenv("SEMANTIC_SIM_THRESHOLD", "0.5"))
 
+SESSION_ID = os.getenv("SESSION_ID", "default")
 SESSION_RESET = os.getenv("SESSION_RESET_ON_START", "true").lower() == "true"
 
 UI_PORT = int(os.getenv("UI_PORT", "8501"))

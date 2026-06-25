@@ -13,6 +13,20 @@ def search_debug(topic, top_k=None, session_id=None, collection=None, mode=None)
     return _run(topic, top_k, session_id, collection, mode)
 
 
+def get_by_id(chunk_id, session_id=None, collection=None):
+    if collection is None:
+        from vector_db.chroma_client import get_collection
+
+        collection = get_collection(session_id)
+    res = collection.get(ids=[chunk_id], include=["documents", "metadatas"])
+    ids = res.get("ids") or []
+    if not ids:
+        return None
+    doc = (res.get("documents") or [""])[0]
+    meta = (res.get("metadatas") or [{}])[0] or {}
+    return _to_chunk(ids[0], doc, meta, meta.get("topic", ""))
+
+
 def _run(topic, top_k, session_id, collection, mode):
     top_k = top_k or settings.RETRIEVAL_TOP_K
     mode = (mode or settings.RETRIEVAL_MODE).lower()

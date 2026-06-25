@@ -17,12 +17,12 @@ class ChunkRecord:
     page: int
 
 
-def _get_collection(collection):
+def _get_collection(collection, session_id):
     if collection is not None:
         return collection
     from vector_db.chroma_client import get_collection
 
-    return get_collection()
+    return get_collection(session_id)
 
 
 def ingest_file(path, topic, session_id, collection=None):
@@ -53,7 +53,7 @@ def _ingest_document(path, topic, session_id, collection):
 def _store_chunks(chunks, topic, session_id, collection):
     if not chunks:
         return 0
-    collection = _get_collection(collection)
+    collection = _get_collection(collection, session_id)
 
     ids, docs, metas = [], [], []
     for index, ch in enumerate(chunks):
@@ -107,7 +107,7 @@ def _store_units(units, topic, session_id, collection):
 
     if not ids:
         return 0
-    collection = _get_collection(collection)
+    collection = _get_collection(collection, session_id)
     collection.upsert(ids=ids, documents=docs, metadatas=metas)
     return len(ids)
 

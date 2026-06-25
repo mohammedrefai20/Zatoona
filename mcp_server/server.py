@@ -10,8 +10,8 @@ retrieval_tool.register(mcp)
 
 def init_collection():
     if settings.SESSION_RESET:
-        return chroma_client.reset_collection()
-    return chroma_client.get_collection()
+        return chroma_client.reset_collection(settings.SESSION_ID)
+    return chroma_client.get_collection(settings.SESSION_ID)
 
 
 def start_mcp_server(host=settings.MCP_HOST, port=settings.MCP_PORT, transport="streamable-http"):

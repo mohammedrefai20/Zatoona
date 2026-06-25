@@ -9,7 +9,7 @@ import streamlit as st
 from config import settings
 from vector_db import chroma_client, embedder, retriever
 from vector_db.ingestion import ingest_file
-from mcp_server.tools.retrieval_tool import get_relevant_chunks
+from mcp_server.tools.retrieval_tool import get_relevant_chunks, get_chunk_by_id
 
 st.set_page_config(page_title="Notes Sandbox", layout="wide")
 st.title("Notes Ingestion & Retrieval Sandbox")
@@ -25,6 +25,8 @@ def active_provider():
 
 with st.sidebar:
     st.header("Status")
+    session_id = st.text_input("Session ID", value=settings.SESSION_ID)
+    settings.SESSION_ID = session_id
     st.write(f"Embedding provider: `{settings.EMBEDDING_PROVIDER}`")
     st.write(f"Active embedder: `{active_provider()}`")
     st.write(f"Chunk mode: `{settings.CHUNK_MODE}`")
@@ -34,22 +36,18 @@ with st.sidebar:
     st.write(f"Rerank min score: `{settings.RERANK_MIN_SCORE}`")
     st.write(f"Min chunk chars: `{settings.MIN_CHUNK_CHARS}`")
     try:
-        st.metric("Chunks in collection", chroma_client.get_collection().count())
+        st.metric("Chunks in session", chroma_client.get_collection(session_id).count())
     except Exception as exc:
         st.error(f"Collection unavailable: {exc}")
 
-    if st.button("Reset collection"):
-        chroma_client.reset_collection()
-        st.success("Collection reset.")
+    if st.button("Reset session"):
+        chroma_client.reset_collection(session_id)
+        st.success("Session reset.")
         st.rerun()
 
 
 st.header("1) Ingest documents & recordings")
-col_a, col_b = st.columns(2)
-with col_a:
-    topic = st.text_input("Topic", value="biology")
-with col_b:
-    session_id = st.text_input("Session ID", value="sandbox-session")
+topic = st.text_input("Topic", value="biology")
 
 uploaded = st.file_uploader(
     "Upload study files",
@@ -76,7 +74,7 @@ if uploaded and st.button("Ingest"):
         except Exception as exc:
             st.error(f"{up.name}: {exc}")
 
-    coll = chroma_client.get_collection()
+    coll = chroma_client.get_collection(session_id)
     data = coll.get(where={"session_id": session_id}, include=["documents", "metadatas"])
     st.subheader(f"Stored chunks ({len(data['ids'])})")
     for cid, doc, meta in zip(data["ids"], data["documents"], data["metadatas"]):
@@ -120,3 +118,14 @@ if st.button("Search"):
                 s4.markdown("Reranked");  s4.write(debug.get("final", []))
     except Exception as exc:
         st.error(f"Search failed: {exc}")
+
+
+st.header("3) Retrieve by chunk ID")
+cid = st.text_input("Chunk ID", value="")
+if st.button("Fetch by ID"):
+    chunk = get_chunk_by_id(cid)
+    if chunk is None:
+        st.info("No chunk with that ID in this session.")
+    else:
+        st.write({"chunk_id": chunk.chunk_id, "topic": chunk.topic, "session_id": chunk.session_id})
+        st.write(chunk.content)

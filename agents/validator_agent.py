@@ -36,11 +36,12 @@ def validate_exam(exam: ExamObject, chunks: list[NoteChunk]) -> ValidationResult
     feedback_lines: list[str] = []
 
     for question in exam.questions:
-        if question.source_chunk_id not in chunk_ids:
+        source_ids = [cid.strip() for cid in question.source_chunk_id.split(",") if cid.strip()]
+        if not source_ids or not all(sid in chunk_ids for sid in source_ids):
             rejected_ids.append(question.question_id)
             feedback_lines.append(
                 f"REJECTED: {question.question_id}: "
-                f"source_chunk_id '{question.source_chunk_id}' not found in available chunks."
+                f"source_chunk_id '{question.source_chunk_id}' contains invalid or missing chunk ID(s)."
             )
 
     questions_to_llm_check = [
@@ -58,7 +59,7 @@ def validate_exam(exam: ExamObject, chunks: list[NoteChunk]) -> ValidationResult
             for q in questions_to_llm_check
         )
 
-        prompt = f"""You are an exam validator. Check each question against its source chunk.
+        prompt = f"""You are an exam validator. Check each question against its source chunk(s).
 
 Source chunks:
 {_format_chunks(chunks)}
@@ -67,8 +68,8 @@ Questions to validate:
 {questions_text}
 
 For each question:
-1. Verify the correct_answer is directly supported by the source chunk content.
-2. Verify the question is answerable from that chunk alone.
+1. Verify the correct_answer is directly supported by the content of the referenced source chunk(s) listed in source_chunk_id.
+2. Verify the question is answerable from those chunk(s) alone.
 3. Mark approved=false if the answer is wrong, unsupported, or hallucinated.
 """
 

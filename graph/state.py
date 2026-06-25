@@ -7,6 +7,8 @@ from schemas.note_chunk import NoteChunk
 class ExamState(TypedDict):
     session_id: str
     topics: list[str]
+    num_questions: int | None  # None = LLM decides based on content
+    difficult: bool
     chunks: list[NoteChunk]
     exam: ExamObject | None
     validation: ValidationResult | None

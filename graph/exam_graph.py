@@ -27,13 +27,26 @@ def build_exam_graph():
     return graph.compile()
 
 
-def run_exam_pipeline(session_id: str, topics: list[str]) -> ExamObject:
-    """Run the full exam creation pipeline and return a validated ExamObject."""
+def run_exam_pipeline(
+    session_id: str,
+    topics: list[str],
+    num_questions: int | None = None,
+    difficult: bool = False,
+) -> ExamObject:
+    """Run the full exam creation pipeline and return a validated ExamObject.
+
+    Args:
+        num_questions: Optional desired number of questions. None lets the
+                       LLM decide. If the requested count exceeds available
+                       chunks, the generator caps at the maximum possible.
+    """
     app = build_exam_graph()
 
     initial_state: ExamState = {
         "session_id": session_id,
         "topics": topics,
+        "num_questions": num_questions,
+        "difficult": difficult,
         "chunks": [],
         "exam": None,
         "validation": None,
@@ -68,8 +81,24 @@ def main():
         required=True,
         help="Comma-separated list of topics",
     )
+    parser.add_argument(
+        "--num-questions",
+        type=int,
+        default=None,
+        help="Desired number of questions (omit to let the LLM decide)",
+    )
+    parser.add_argument(
+        "--difficult",
+        action="store_true",
+        help="Generate difficult questions that combine information from multiple chunks",
+    )
     args = parser.parse_args()
 
     topics = [t.strip() for t in args.topics.split(",") if t.strip()]
-    exam = run_exam_pipeline(session_id=args.session, topics=topics)
+    exam = run_exam_pipeline(
+        session_id=args.session,
+        topics=topics,
+        num_questions=args.num_questions,
+        difficult=args.difficult,
+    )
     print(exam.model_dump_json(indent=2))

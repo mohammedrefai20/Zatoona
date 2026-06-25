@@ -12,6 +12,8 @@ def test_fetch_chunks_loads_mock_data():
     state: ExamState = {
         "session_id": "test-session-001",
         "topics": ["ai", "python"],
+        "num_questions": None,
+        "difficult": False,
         "chunks": [],
         "exam": None,
         "validation": None,

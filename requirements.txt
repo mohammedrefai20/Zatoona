@@ -26,6 +26,8 @@ docling
 rapidocr-onnxruntime
 pymupdf
 pillow
+rapidocr
+onnxruntime
 
 # ── Tokenization & Chunking ───────────────────────────────────
 tiktoken

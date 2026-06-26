@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.env
+chroma_db
+outputs
+envs
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.venv
+venv

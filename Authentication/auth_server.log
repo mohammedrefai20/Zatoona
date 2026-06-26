@@ -1,0 +1,22 @@
+2026-06-17 18:19:35,814 - WARNING - (trapped) error reading bcrypt version
+Traceback (most recent call last):
+  File "/home/magdy/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 620, in _load_backend_mixin
+    version = _bcrypt.__about__.__version__
+              ^^^^^^^^^^^^^^^^^
+AttributeError: module 'bcrypt' has no attribute '__about__'
+2026-06-17 18:19:36,285 - INFO - HTTP Request: POST http://testserver/auth/signup "HTTP/1.1 200 OK"
+2026-06-17 18:19:36,738 - INFO - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 200 OK"
+2026-06-17 18:19:36,750 - INFO - HTTP Request: GET http://testserver/auth/verify "HTTP/1.1 200 OK"
+2026-06-17 18:19:36,781 - INFO - HTTP Request: POST http://testserver/auth/refresh "HTTP/1.1 200 OK"
+2026-06-17 18:19:36,796 - INFO - HTTP Request: POST http://testserver/auth/logout "HTTP/1.1 200 OK"
+2026-06-17 18:29:19,090 - WARNING - (trapped) error reading bcrypt version
+Traceback (most recent call last):
+  File "/home/magdy/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 620, in _load_backend_mixin
+    version = _bcrypt.__about__.__version__
+              ^^^^^^^^^^^^^^^^^
+AttributeError: module 'bcrypt' has no attribute '__about__'
+2026-06-17 18:29:19,353 - INFO - HTTP Request: POST http://testserver/auth/signup "HTTP/1.1 200 OK"
+2026-06-17 18:29:19,605 - INFO - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 200 OK"
+2026-06-17 18:29:19,611 - INFO - HTTP Request: GET http://testserver/auth/verify "HTTP/1.1 200 OK"
+2026-06-17 18:29:19,626 - INFO - HTTP Request: POST http://testserver/auth/refresh "HTTP/1.1 200 OK"
+2026-06-17 18:29:19,636 - INFO - HTTP Request: POST http://testserver/auth/logout "HTTP/1.1 200 OK"

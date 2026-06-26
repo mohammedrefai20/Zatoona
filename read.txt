@@ -1,0 +1,1 @@
+{"topic":"aws","chunks_stored":10,"message":"Notes ingested successfully"}

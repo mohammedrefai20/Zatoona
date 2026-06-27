@@ -1,342 +1,282 @@
-# Classroom Exam Agent — Project Structure
+# Team C — Corrector Agent & Feedback System
+
+This module is responsible for the final stage of the Classroom Exam Agent pipeline.
+It receives a validated exam from the exam creation pipeline, collects the student's
+answers, grades each one using the student's own notes as reference, and returns a
+structured feedback report through a Streamlit UI.
 
 ---
 
-## Root Structure
+## What This Module Does
 
 ```
-classroom-exam-agent/
-│
-├── .env                        # all API keys and config (never commit this)
-├── .env.example                # template showing required env variables
-├── .gitignore                  # ignore .env, __pycache__, chroma_db/, etc.
-├── requirements.txt            # all python dependencies
-├── README.md                   # project overview and setup instructions
-├── main.py                     # entry point — starts the full pipeline
-│
-├── config/
-│   └── settings.py             # loads .env and exposes config constants
-│
-├── mcp_server/                 # TEAM A
-├── vector_db/                  # TEAM A
-├── agents/                     # TEAM B + TEAM C
-├── graph/                      # TEAM B
-├── ui/                         # TEAM C
-├── schemas/                    # SHARED — all teams
-└── tests/                      # SHARED — all teams
+Validated exam (from exam pipeline)
+        │
+        ▼
+Student answers questions via UI
+        │
+        ▼
+Corrector Agent grades each answer
+  └── retrieves source chunk from MCP server
+  └── sends question + answer + chunk to LLM
+  └── LLM grades and explains using the notes
+        │
+        ▼
+Encouragement message generated based on score
+        │
+        ▼
+Feedback report returned to student via UI
 ```
 
 ---
 
-## Team A — Infrastructure
+## Module Structure
 
 ```
+agents/
+  corrector_agent.py      # core grading logic — grades answers, explains mistakes
+  exam_loader.py          # loads exam (mock or real pipeline)
+  answer_loader.py        # loads student answers (mock or real UI)
+
 mcp_server/
-│
-├── __init__.py
-├── server.py                   # MCP server setup and startup
-└── tools/
-    ├── __init__.py
-    └── retrieval_tool.py       # get_relevant_chunks(topic) tool definition
+  mcp_client.py           # connects to MCP server to retrieve note chunks by ID
 
-vector_db/
-│
-├── __init__.py
-├── chroma_client.py            # ChromaDB connection and collection setup
-├── embedder.py                 # converts text chunks into vector embeddings
-├── ingestion.py                # takes raw notes → chunks → embeds → stores
-└── retriever.py                # semantic search logic used by retrieval_tool
-```
-
----
-
-## Team B — Exam Creation
-
-```
-agents/
-│
-├── __init__.py
-├── generator_agent.py          # Agent 1 — generates exam from note chunks
-└── validator_agent.py          # Agent 2 — validates questions against notes
-
-graph/
-│
-├── __init__.py
-├── exam_graph.py               # LangGraph state machine definition
-├── nodes.py                    # each graph node (generate, validate, route)
-├── edges.py                    # conditional edges (approve vs reject routing)
-└── state.py                    # ExamState definition — shared graph state
-```
-
----
-
-## Team C — Grading and Feedback
-
-```
-agents/
-│
-├── corrector_agent.py          # Agent 3 — grades answers, pulls chunks, gives feedback
+schemas/
+  exam_object.py          # ExamObject and Question — received from exam pipeline
+  feedback_report.py      # FeedbackReport and QuestionResult — produced by this module
+  note_chunk.py           # NoteChunk — returned by MCP server
 
 ui/
-│
-├── __init__.py
-├── app.py                      # main UI entry point (Streamlit or CLI)
-├── pages/
-│   ├── upload_page.py          # student uploads notes and topics
-│   ├── exam_page.py            # student sees exam and submits answers
-│   └── feedback_page.py        # student sees feedback report
-└── components/
-    ├── question_card.py        # renders a single question
-    └── feedback_card.py        # renders per-question feedback result
+  app.py                  # Streamlit UI — 3 pages: exam, grading, feedback report
+
+utils/
+  report_writer.py        # saves and prints feedback reports
+
+tests/team_c/
+  test_corrector_agent.py       # end-to-end test for the corrector agent
+  mock_mcp_tool.py              # simulates MCP server for local testing
+  mock_data/
+    mock_exam_object.json       # sample exam for testing
+    mock_student_answers.json   # sample answers for testing
+    mock_mcp_response.json      # sample note chunks for testing
+
+outputs/
+  report_<session_id>.json      # generated feedback reports saved here
 ```
 
 ---
 
-## Shared — Schemas
+## Corrector Agent Flow
 
 ```
-schemas/
-│
-├── __init__.py
-├── note_chunk.py               # NoteChunk schema
-├── exam_object.py              # ExamObject + Question schema
-└── feedback_report.py          # FeedbackReport + QuestionResult schema
+For each question in the exam
+        │
+        ├── get source_chunk_id from exam object
+        │
+        ├── call MCP: get_chunk_by_id(source_chunk_id)
+        │       └── returns the note chunk the question was built from
+        │
+        ├── send to LLM (Groq):
+        │       question + correct answer + student answer + note chunk
+        │
+        └── LLM returns:
+                is_correct: true / false
+                explanation: grounded in the student's own notes
+
+After all questions
+        └── collect wrong topics
+        └── generate encouragement message based on score
+        └── build FeedbackReport
 ```
 
-### Schema definitions
+---
+
+## Feedback Report Schema
 
 ```python
-# schemas/note_chunk.py
-class NoteChunk:
-    chunk_id   : str
-    topic      : str
-    content    : str
-    session_id : str
-
-# schemas/exam_object.py
-class Question:
-    question_id      : str
-    topic            : str
-    question         : str
-    correct_answer   : str
-    source_chunk_id  : str
-
-class ExamObject:
-    session_id : str
-    topics     : list[str]
-    status     : str          # draft | validated
-    questions  : list[Question]
-
-# schemas/feedback_report.py
-class QuestionResult:
+class QuestionResult(BaseModel):
     question_id    : str
     question       : str
     student_answer : str
     is_correct     : bool
-    explanation    : str
-    source_chunk   : str
+    explanation    : str       # references the student's notes
+    source_chunk   : str       # the note chunk used for grading
 
-class FeedbackReport:
-    session_id        : str
-    score             : int
-    topics_to_review  : list[str]
-    encouragement     : str
-    results           : list[QuestionResult]
+class FeedbackReport(BaseModel):
+    session_id       : str
+    score            : int
+    topics_to_review : list[str]
+    encouragement    : str
+    results          : list[QuestionResult]
 ```
 
 ---
 
-## Shared — Tests
+## UI Pages
 
 ```
-tests/
-│
-├── __init__.py
-│
-├── team_a/
-│   ├── test_ingestion.py       # test note chunking and embedding
-│   ├── test_retriever.py       # test chunk retrieval by topic
-│   └── test_mcp_server.py      # test MCP tool response
-│
-├── team_b/
-│   ├── test_generator_agent.py # test exam generation with mock chunks
-│   ├── test_validator_agent.py # test validation logic (approve + reject)
-│   └── test_exam_graph.py      # test full LangGraph loop
-│
-└── team_c/
-    ├── test_corrector_agent.py # test grading logic and feedback generation
-    └── mock_data/
-        ├── mock_exam_object.json    # fake exam for testing without Team B
-        └── mock_mcp_response.json   # fake MCP chunks for testing without Team A
-```
+Page 1 — Exam
+  Student reads each question
+  Types answer in text input
+  Submits when all answers are filled
 
----
+Page 2 — Grading
+  Spinner shown while corrector agent runs
+  MCP server queried per question
+  LLM grades each answer
 
-## Environment Variables
-
-```
-# .env.example
-
-# LLM
-OPENAI_API_KEY=your_openai_key_here
-MODEL_NAME=gpt-4o
-
-# ChromaDB
-CHROMA_PERSIST_DIR=./chroma_db
-CHROMA_COLLECTION_NAME=student_notes
-
-# MCP Server
-MCP_SERVER_HOST=localhost
-MCP_SERVER_PORT=8000
-
-# Session
-SESSION_RESET_ON_START=true
-
-# UI
-UI_PORT=8501
+Page 3 — Feedback Report
+  Score + progress bar
+  Encouragement message
+  Topics to review (if any)
+  Per-question expandable cards
+    ✅ Correct — short confirmation
+    ❌ Wrong   — explanation + reference to notes
+  Button to start a new exam
 ```
 
 ---
 
-## Requirements
+## Integration Points
 
 ```
-# requirements.txt
+Depends on                    What we need from them
+──────────────────────────────────────────────────────────────
+MCP server (Layer 1)          get_chunk_by_id(chunk_id) tool
+                              must return NoteChunk with content field
 
-# LLM and agents
-langchain
-langchain-openai
-langchain-community
-langgraph
-openai
-
-# MCP
-mcp
-
-# Vector DB
-chromadb
-
-# Embeddings
-sentence-transformers
-
-# UI
-streamlit
-
-# Schemas and validation
-pydantic
-
-# Environment
-python-dotenv
-
-# Testing
-pytest
+Exam pipeline (Layer 2)       validated ExamObject
+                              each question must have source_chunk_id
 ```
+
+### Switching from mock to real
+
+All integration points are controlled by flags in `.env`:
+
+```
+USE_REAL_MCP=false      # true when MCP server is running
+USE_REAL_EXAM=false     # true when exam pipeline is connected
+USE_REAL_ANSWERS=false  # true when answers come from UI (always true in production)
+```
+
+Flip one flag at a time and test before flipping the next.
 
 ---
 
-## Config
+## Setup
 
-```python
-# config/settings.py
+### 1. Install dependencies
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY")
-MODEL_NAME           = os.getenv("MODEL_NAME", "gpt-4o")
-CHROMA_PERSIST_DIR   = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-CHROMA_COLLECTION    = os.getenv("CHROMA_COLLECTION_NAME", "student_notes")
-MCP_HOST             = os.getenv("MCP_SERVER_HOST", "localhost")
-MCP_PORT             = int(os.getenv("MCP_SERVER_PORT", 8000))
-SESSION_RESET        = os.getenv("SESSION_RESET_ON_START", "true") == "true"
-UI_PORT              = int(os.getenv("UI_PORT", 8501))
-```
-
----
-
-## Main Entry Point
-
-```python
-# main.py
-
-from config.settings import MCP_HOST, MCP_PORT
-from mcp_server.server import start_mcp_server
-from graph.exam_graph import run_exam_pipeline
-from ui.app import start_ui
-
-if __name__ == "__main__":
-    start_mcp_server(host=MCP_HOST, port=MCP_PORT)
-    start_ui()
-```
-
----
-
-## File Ownership by Team
-
-```
-TEAM A owns:
-  mcp_server/
-  vector_db/
-  tests/team_a/
-
-TEAM B owns:
-  agents/generator_agent.py
-  agents/validator_agent.py
-  graph/
-  tests/team_b/
-
-TEAM C owns:
-  agents/corrector_agent.py
-  ui/
-  tests/team_c/
-  tests/team_c/mock_data/
-
-ALL TEAMS own:
-  schemas/           ← agree on this first before writing anything
-  requirements.txt   ← each team adds their dependencies
-  .env.example       ← each team adds their required variables
-  README.md          ← each team documents their module
-```
-
----
-
-## Setup Instructions
-
-```
-# 1. clone the repo
-git clone https://github.com/your-team/classroom-exam-agent
-cd classroom-exam-agent
-
-# 2. create virtual environment
-python -m venv venv
-source venv/bin/activate        # mac / linux
-venv\Scripts\activate           # windows
-
-# 3. install dependencies
+```bash
 pip install -r requirements.txt
+```
 
-# 4. set up environment variables
+### 2. Configure environment
+
+```bash
 cp .env.example .env
-# open .env and fill in your API keys
+```
 
-# 5. run the project
-python main.py
+Fill in:
+```
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+USE_REAL_MCP=false
+USE_REAL_EXAM=false
+USE_REAL_ANSWERS=false
 ```
 
 ---
 
-## Git Branch Strategy
+## Running
 
-```
-main              ← stable, working code only
-  │
-  ├── team-a      ← Team A working branch
-  ├── team-b      ← Team B working branch
-  └── team-c      ← Team C working branch (your branch)
+### Run the corrector agent test (mock mode)
 
-Rule: never push directly to main
-      open a pull request and get one review before merging
+```bash
+python -m tests.team_c.test_corrector_agent
 ```
 
+Output: graded report printed to terminal + saved to `outputs/`
+
+### Run the full end-to-end test (real integrations)
+
+Make sure the MCP server is running in a separate terminal first:
+
+```bash
+python -m mcp_server.server
+```
+
+Then set flags in `.env`:
+```
+USE_REAL_MCP=true
+USE_REAL_EXAM=true
+```
+
+Then run:
+```bash
+python -m tests.team_c.test_corrector_agent
+```
+
+### Run the UI
+
+```bash
+streamlit run ui/app.py
+```
+
+Opens at `http://localhost:8501`
+
+---
+
+## Testing Strategy
+
+```
+Week 1 — mock everything
+  USE_REAL_MCP=false
+  USE_REAL_EXAM=false
+  Run: python -m tests.team_c.test_corrector_agent
+
+Week 2 — integrate one layer at a time
+  Step 1: set USE_REAL_MCP=true  → test MCP connection alone
+  Step 2: set USE_REAL_EXAM=true → test full pipeline
+
+Week 3 — end-to-end
+  All flags true
+  Run full pipeline + UI
+  streamlit run ui/app.py
+```
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Grading LLM | Groq — llama-3.3-70b-versatile |
+| Agent framework | LangChain |
+| MCP client | mcp (streamable-http transport) |
+| UI | Streamlit |
+| Schema validation | Pydantic |
+| Environment | python-dotenv |
+| Testing | pytest |
+
+---
+
+## Key Design Decisions
+
+```
+Decision 1 — Grade by chunk ID not by topic search
+  reason: each question already has source_chunk_id
+  benefit: direct retrieval, no semantic search needed, faster and more accurate
+
+Decision 2 — Single MCP client file
+  reason: one place to swap mock for real
+  benefit: changing USE_REAL_MCP is the only change needed
+
+Decision 3 — Session resets between exams
+  reason: each exam is tied to one session's notes
+  benefit: no cross-session contamination
+
+Decision 4 — Encouragement generated after all grading
+  reason: needs the full score and topic list to be personalized
+  benefit: one LLM call instead of one per question
+```

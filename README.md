@@ -335,10 +335,6 @@ Key knobs (see `config/settings.py` for the full list):
 
 ## ⚠️ Limitations & 🔭 Future Work
 
-- **Questions are open-text today.** MCQ support is on the roadmap.
-- **Topic naming is manual.** An agent that auto-titles uploaded material from its content is planned.
-- **Web enrichment** exists in `vector_db/enrichment.py` but is not yet wired end-to-end.
-- Exam generation is synchronous (no live progress stream); the frontend simulates staged progress.
 - Retrieval quality is bounded by the quality of the uploaded material.
 
 ---

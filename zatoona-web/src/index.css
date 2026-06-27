@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+
+/* Toggle dark mode by a class on <html> (set before paint in index.html). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design tokens (see DESIGN.md). Tailwind v4 reads @theme to generate utilities. ── */
+@theme {
+  /* Brand — aubergine */
+  --color-brand-50: oklch(0.971 0.012 350);
+  --color-brand-100: oklch(0.94 0.022 350);
+  --color-brand-200: oklch(0.885 0.038 350);
+  --color-brand-300: oklch(0.79 0.06 350);
+  --color-brand-400: oklch(0.62 0.095 351);
+  --color-brand-500: oklch(0.5 0.11 351);
+  --color-brand-600: oklch(0.43 0.11 352);
+  --color-brand-700: oklch(0.355 0.09 352);
+  --color-brand-800: oklch(0.285 0.07 350);
+  --color-brand-900: oklch(0.22 0.05 348);
+  --color-brand-950: oklch(0.165 0.035 345);
+
+  /* Olive — secondary */
+  --color-olive-300: oklch(0.8 0.08 122);
+  --color-olive-400: oklch(0.7 0.1 123);
+  --color-olive-500: oklch(0.62 0.105 124);
+  --color-olive-600: oklch(0.54 0.1 126);
+  --color-olive-700: oklch(0.46 0.085 127);
+
+  /* Gold — accent */
+  --color-gold-300: oklch(0.88 0.09 84);
+  --color-gold-400: oklch(0.82 0.115 81);
+  --color-gold-500: oklch(0.76 0.125 78);
+
+  /* Neutrals — aubergine-tinted */
+  --color-canvas: oklch(0.985 0.004 340);
+  --color-surface: oklch(1 0 0);
+  --color-surface-2: oklch(0.967 0.006 340);
+  --color-border: oklch(0.91 0.008 340);
+  --color-border-2: oklch(0.86 0.01 340);
+  --color-ink: oklch(0.24 0.02 345);
+  --color-muted: oklch(0.5 0.018 345);
+  --color-faint: oklch(0.62 0.014 345);
+
+  /* Semantic */
+  --color-success: oklch(0.56 0.14 150);
+  --color-success-bg: oklch(0.96 0.03 150);
+  --color-error: oklch(0.555 0.17 25);
+  --color-error-bg: oklch(0.965 0.025 25);
+  --color-warning: oklch(0.76 0.125 78);
+  --color-info: oklch(0.62 0.095 351);
+
+  /* Fonts */
+  --font-display: 'Fredoka', ui-rounded, system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Radii */
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  /* Aubergine-tinted elevation */
+  --shadow-sm: 0 1px 2px oklch(0.22 0.05 348 / 0.06);
+  --shadow-md: 0 4px 16px -4px oklch(0.22 0.05 348 / 0.1);
+  --shadow-lg: 0 12px 32px -8px oklch(0.22 0.05 348 / 0.16);
+
+  /* Z-index scale */
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-overlay: 1200;
+  --z-modal: 1300;
+  --z-toast: 1400;
+  --z-tooltip: 1500;
+
+  /* Motion easings */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background-color: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+  /* One consistent focus ring across the whole app */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* ── Dark theme ── Override the token values; every utility reads var(--color-*),
+   so components adapt without per-element dark: variants. The brand ramp is
+   remapped by role: text-brand-700/800 (headings/accents) → light, bg-brand-50/100
+   (subtle tints) → dark tints, brand-600 (primary action) stays vivid. */
+.dark {
+  --color-canvas: oklch(0.17 0.018 330);
+  --color-surface: oklch(0.215 0.022 332);
+  --color-surface-2: oklch(0.255 0.024 332);
+  --color-border: oklch(0.3 0.02 332);
+  --color-border-2: oklch(0.37 0.022 332);
+  --color-ink: oklch(0.96 0.008 330);
+  --color-muted: oklch(0.74 0.014 330);
+  --color-faint: oklch(0.58 0.015 330);
+
+  --color-brand-50: oklch(0.27 0.035 345);
+  --color-brand-100: oklch(0.31 0.045 345);
+  --color-brand-200: oklch(0.37 0.055 345);
+  --color-brand-600: oklch(0.55 0.13 350);
+  --color-brand-700: oklch(0.82 0.06 332);
+  --color-brand-800: oklch(0.89 0.05 332);
+
+  --color-olive-700: oklch(0.78 0.09 124);
+
+  --color-success: oklch(0.72 0.13 150);
+  --color-success-bg: oklch(0.3 0.05 150);
+  --color-error: oklch(0.72 0.15 25);
+  --color-error-bg: oklch(0.3 0.06 25);
+  --color-warning: oklch(0.82 0.115 81);
+  --color-info: oklch(0.7 0.09 351);
+
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

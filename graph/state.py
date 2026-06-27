@@ -9,6 +9,7 @@ class ExamState(TypedDict):
     topics: list[str]
     num_questions: int | None  # None = LLM decides based on content
     difficult: bool
+    question_type: str  # "open" | "mcq" | "mixed"
     chunks: list[NoteChunk]
     exam: ExamObject | None
     validation: ValidationResult | None

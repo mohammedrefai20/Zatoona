@@ -1,13 +1,3 @@
-__pycache__/
-*.pyc
-*.pyo
-.env
-chroma_db/
-outputs/
-team-a-env-backup.txt
-envs/
-docs/
-
 # Logs
 logs
 *.log

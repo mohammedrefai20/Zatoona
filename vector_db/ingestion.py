@@ -25,14 +25,36 @@ def _get_collection(collection, session_id):
     return get_collection(session_id)
 
 
-def ingest_file(path, topic, session_id, collection=None):
+def _sample(texts) -> str:
+    return "\n".join(t for t in texts[:3] if t)[:2000]
+
+
+def _resolve_topic(topic, text_sample, meta_out):
+    """Return the given topic, or auto-name one from the material when it's blank.
+
+    Backward-compatible: when ``topic`` is provided this is an identity passthrough,
+    and ``meta_out`` (when supplied) reports the resolved name back to the caller.
+    """
+    if topic and str(topic).strip():
+        resolved = topic
+    else:
+        from utils.topic_namer import generate_topic_name
+
+        resolved = generate_topic_name(text_sample)
+    if meta_out is not None:
+        meta_out["topic"] = resolved
+    return resolved
+
+
+def ingest_file(path, topic, session_id, collection=None, *, meta_out=None):
     if not os.path.isfile(path):
         raise ValueError(f"file not found: {path}")
 
     if docling_parser.is_document(path):
-        return _ingest_document(path, topic, session_id, collection)
+        return _ingest_document(path, topic, session_id, collection, meta_out=meta_out)
     if loaders.is_media(path):
         units = loaders.load_media(path)
+        topic = _resolve_topic(topic, _sample([u.text for u in units]), meta_out)
         return _store_units(units, topic, session_id, collection)
 
     ext = os.path.splitext(path)[1].lower()
@@ -42,11 +64,12 @@ def ingest_file(path, topic, session_id, collection=None):
     )
 
 
-def _ingest_document(path, topic, session_id, collection):
+def _ingest_document(path, topic, session_id, collection, meta_out=None):
     source = os.path.basename(path)
     dl_doc = docling_parser.parse(path)
     transcribed = docling_parser.is_scanned(path)
     chunks = chunking.chunk(dl_doc, source, transcribed=transcribed)
+    topic = _resolve_topic(topic, _sample([c.content for c in chunks]), meta_out)
     return _store_chunks(chunks, topic, session_id, collection)
 
 
@@ -122,9 +145,10 @@ def _store_units(units, topic, session_id, collection, source_type="file", sourc
 
 
 def ingest_text(text, source_ref, topic, session_id, source_type, *,
-                title=None, transcribed=False, collection=None):
+                title=None, transcribed=False, collection=None, meta_out=None):
     if not text or not text.strip():
         return 0
+    topic = _resolve_topic(topic, text, meta_out)
     source_file = title or source_ref or source_type
     dl_doc = docling_parser.parse_text(text, name=source_file)
     chunks = chunking.chunk(dl_doc, source_file, transcribed=transcribed)
@@ -132,23 +156,26 @@ def ingest_text(text, source_ref, topic, session_id, source_type, *,
                          source_type=source_type, source_ref=source_ref, notion_page=title)
 
 
-def ingest_url(url, topic, session_id, collection=None):
+def ingest_url(url, topic, session_id, collection=None, *, meta_out=None):
     from vector_db import youtube
 
     kind, ident = youtube.parse_target(url)
     if kind == "video":
-        return _process_video(ident, url, topic, session_id, collection)["stored_count"] or 0
-    return _ingest_playlist(url, topic, session_id, collection)
+        return _process_video(ident, url, topic, session_id, collection, meta_out=meta_out)["stored_count"] or 0
+    return _ingest_playlist(url, topic, session_id, collection, meta_out=meta_out)
 
 
-def _ingest_playlist(playlist_url, topic, session_id, collection):
+def _ingest_playlist(playlist_url, topic, session_id, collection, meta_out=None):
     from vector_db import youtube
 
     video_ids = youtube.list_playlist(playlist_url)
     outcomes = []
     for video_id in video_ids:
         ref = f"https://www.youtube.com/watch?v={video_id}"
-        outcomes.append(_process_video(video_id, ref, topic, session_id, collection))
+        outcomes.append(_process_video(video_id, ref, topic, session_id, collection, meta_out=meta_out))
+        # reuse the first auto-generated name across the rest of the playlist
+        if (not topic or not str(topic).strip()) and meta_out and meta_out.get("topic"):
+            topic = meta_out["topic"]
 
     # future: len == cap also fires for a playlist that happens to be exactly cap-length;
     # a precise notice needs the pre-cap total, which flat enumeration doesn't return here.
@@ -160,7 +187,7 @@ def _ingest_playlist(playlist_url, topic, session_id, collection):
     return outcomes
 
 
-def _process_video(video_id, source_ref, topic, session_id, collection):
+def _process_video(video_id, source_ref, topic, session_id, collection, meta_out=None):
     from vector_db import youtube
 
     try:
@@ -174,6 +201,7 @@ def _process_video(video_id, source_ref, topic, session_id, collection):
         return {"ref": source_ref, "stored_count": None, "status": "skipped",
                 "reason": "no captions available and audio transcription is disabled"}
 
+    topic = _resolve_topic(topic, _sample([u.text for u in units]), meta_out)
     stored = _store_units(units, topic, session_id, collection,
                           source_type="youtube", source_ref=source_ref)
     return {"ref": source_ref, "stored_count": stored, "status": "ingested"}

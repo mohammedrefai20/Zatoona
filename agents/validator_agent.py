@@ -48,6 +48,25 @@ def validate_exam(exam: ExamObject, chunks: list[NoteChunk]) -> ValidationResult
                 f"REJECTED: {question.question_id}: "
                 f"source_chunk_id '{question.source_chunk_id}' contains invalid or missing chunk ID(s)."
             )
+            continue
+
+        # Deterministic MCQ structure check (no LLM needed).
+        if getattr(question, "question_type", "open") == "mcq":
+            options = question.options or []
+            if len(options) < 2:
+                rejected_ids.append(question.question_id)
+                feedback_lines.append(
+                    f"REJECTED: {question.question_id}: a multiple-choice question must have "
+                    f"at least 2 options (provide exactly 4, one correct)."
+                )
+                continue
+            option_set = {o.strip().casefold() for o in options}
+            if (question.correct_answer or "").strip().casefold() not in option_set:
+                rejected_ids.append(question.question_id)
+                feedback_lines.append(
+                    f"REJECTED: {question.question_id}: correct_answer must exactly match "
+                    f"one of the provided options."
+                )
 
     questions_to_llm_check = [
         q for q in exam.questions if q.question_id not in rejected_ids

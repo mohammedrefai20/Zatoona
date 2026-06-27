@@ -68,6 +68,7 @@ def generate_exam(
     chunks: list[NoteChunk],
     num_questions: int | None = None,
     difficult: bool = False,
+    question_type: str = "open",
     existing_exam: ExamObject | None = None,
     retry_feedback: str | None = None,
     rejected_question_ids: list[str] | None = None,
@@ -108,6 +109,25 @@ def generate_exam(
             "   List its single ID in the `source_chunk_id` field (e.g. 'chunk-001')."
         )
 
+    if question_type == "mcq":
+        format_instruction = (
+            "ALL questions MUST be multiple-choice: set question_type=\"mcq\" and provide "
+            "EXACTLY 4 entries in the `options` list, exactly one of which is correct. "
+            "The `correct_answer` MUST be the exact text of the correct option. "
+            "Distractors must be plausible but clearly incorrect according to the notes."
+        )
+    elif question_type == "mixed":
+        format_instruction = (
+            "Create a balanced MIX of open-ended and multiple-choice questions. "
+            "For open questions set question_type=\"open\" and leave `options` empty. "
+            "For multiple-choice set question_type=\"mcq\" with EXACTLY 4 `options` "
+            "(exactly one correct); `correct_answer` must be the exact text of the correct option."
+        )
+    else:
+        format_instruction = (
+            "All questions are open-ended: set question_type=\"open\" and leave `options` empty."
+        )
+
     available_ids = ", ".join(c.chunk_id for c in chunks)
 
     prompt = f"""You are an exam generator for a classroom assistant.
@@ -137,6 +157,7 @@ Topics: {", ".join(topics)}
 6. Use unique, sequential question_id values (e.g. q-001, q-002, q-003).
 7. Each question should test a distinct concept — avoid asking the same
    thing in different words.
+8. QUESTION FORMAT: {format_instruction}
 """
 
     if is_retry:

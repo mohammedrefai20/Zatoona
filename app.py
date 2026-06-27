@@ -17,6 +17,7 @@ from graph.exam_graph import ExamPipelineError, run_exam_pipeline
 from mcp_server.server import start_mcp_server
 from utils.exam_store import get_stored_exam, list_exam_history, load_exam, save_exam
 from utils.report_writer import save_report
+from vector_db import enrichment
 from vector_db.chroma_client import get_collection
 from vector_db.ingestion import ingest_file, ingest_text, ingest_url
 
@@ -43,6 +44,7 @@ class GenerateExamRequest(BaseModel):
     topics: list[str]
     num_questions: int | None = None
     difficult: bool = False
+    question_type: str = "open"  # "open" | "mcq" | "mixed"
 
 
 class AnswerItem(BaseModel):
@@ -54,6 +56,21 @@ class SubmitAnswerRequest(BaseModel):
     answers: list[AnswerItem]
 
 
+class ProposalModel(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
+    topic: str
+
+
+class EnrichProposeRequest(BaseModel):
+    limit: int | None = None
+
+
+class EnrichIngestRequest(BaseModel):
+    approved: list[ProposalModel]
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -62,29 +79,33 @@ def health_check():
 @app.post("/upload/")
 async def upload_notes(
     current_user: User = Depends(get_current_user),
-    topic: str = Form(...),
+    topic: str | None = Form(None),
     file: UploadFile | None = File(None),
     url: str | None = Form(None),
     text: str | None = Form(None),
 ):
-    """Ingest notes into ChromaDB for the authenticated user."""
+    """Ingest notes into ChromaDB for the authenticated user.
+
+    `topic` is optional — if omitted, an agent names it from the material's content.
+    """
     session_id = current_user.session_id
     collection = get_collection(session_id)
     sources = sum(x is not None for x in (file, url, text))
     if sources != 1:
         raise HTTPException(400, "Provide exactly one of: file, url, or text")
 
+    meta: dict = {}  # ingestion reports the resolved topic (provided or auto-named) here
     if file:
         suffix = Path(file.filename or "upload").suffix
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
         try:
-            count = ingest_file(tmp_path, topic, session_id, collection)
+            count = ingest_file(tmp_path, topic, session_id, collection, meta_out=meta)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
     elif url:
-        result = ingest_url(url, topic, session_id, collection)
+        result = ingest_url(url, topic, session_id, collection, meta_out=meta)
         count = len(result) if isinstance(result, list) else result
     else:
         count = ingest_text(
@@ -94,10 +115,11 @@ async def upload_notes(
             session_id,
             source_type="text",
             collection=collection,
+            meta_out=meta,
         )
 
     return {
-        "topic": topic,
+        "topic": meta.get("topic") or topic or "Untitled notes",
         "chunks_stored": count,
         "message": "Notes ingested successfully",
     }
@@ -116,6 +138,7 @@ def generate_exam(body: GenerateExamRequest, current_user: User = Depends(get_cu
             topics=body.topics,
             num_questions=body.num_questions,
             difficult=body.difficult,
+            question_type=body.question_type,
         )
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -133,6 +156,8 @@ def generate_exam(body: GenerateExamRequest, current_user: User = Depends(get_cu
                 "question_id": q.question_id,
                 "topic": q.topic,
                 "question": q.question,
+                "question_type": q.question_type,
+                "options": q.options,  # null for open questions; never the correct answer
             }
             for q in exam.questions
         ],
@@ -183,5 +208,54 @@ def get_history(current_user: User = Depends(get_current_user)):
     if not exams:
         raise HTTPException(404, "No exams found")
     return exams
+
+
+# ── Web enrichment (opt-in) ──────────────────────────────────────────────
+# Suggest web pages related to the user's uploaded topics, ingest the ones they
+# approve as extra material (tagged source_type="web", fully removable). The act
+# of calling these endpoints IS the opt-in — nothing hits the network otherwise.
+
+@app.post("/enrich/propose/")
+def enrich_propose(body: EnrichProposeRequest, current_user: User = Depends(get_current_user)):
+    """Propose web pages related to this user's uploaded topics (no ingestion yet)."""
+    session_id = current_user.session_id
+    collection = get_collection(session_id)
+    proposals = enrichment.propose(session_id, enabled=True, limit=body.limit, collection=collection)
+    return {
+        "proposals": [
+            {"title": p.title, "url": p.url, "snippet": p.snippet, "topic": p.topic}
+            for p in proposals
+        ]
+    }
+
+
+@app.post("/enrich/ingest/")
+def enrich_ingest(body: EnrichIngestRequest, current_user: User = Depends(get_current_user)):
+    """Fetch and ingest the approved web pages as extra material for this user."""
+    session_id = current_user.session_id
+    collection = get_collection(session_id)
+    approved = [
+        enrichment.Proposal(title=p.title, url=p.url, snippet=p.snippet, topic=p.topic, selected=True)
+        for p in body.approved
+    ]
+    outcomes = enrichment.ingest_approved(approved, session_id, enabled=True, collection=collection)
+    return {"outcomes": outcomes}
+
+
+@app.get("/enrich/")
+def enrich_list(current_user: User = Depends(get_current_user)):
+    """List the web-sourced chunks added for this user."""
+    session_id = current_user.session_id
+    return {"items": enrichment.list_enrichment(session_id, collection=get_collection(session_id))}
+
+
+@app.delete("/enrich/")
+def enrich_remove(current_user: User = Depends(get_current_user)):
+    """Remove all web-sourced chunks for this user."""
+    session_id = current_user.session_id
+    removed = enrichment.remove_enrichment(session_id, collection=get_collection(session_id))
+    return {"removed": removed}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

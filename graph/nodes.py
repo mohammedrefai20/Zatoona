@@ -35,6 +35,7 @@ def generate(state: ExamState) -> dict:
         chunks=state["chunks"],
         num_questions=state.get("num_questions"),
         difficult=state.get("difficult", False),
+        question_type=state.get("question_type", "open"),
         existing_exam=existing_exam,
         retry_feedback=validation.feedback if validation else None,
         rejected_question_ids=validation.rejected_question_ids if validation else None,

@@ -35,7 +35,25 @@ def _grade_answer(
     student_answer: str,
     chunk_content: str
 ) -> QuestionResult:
-    # sends one question to the LLM and gets back structured feedback
+    # Multiple-choice is graded deterministically — no LLM, no variance, instant.
+    if getattr(question, "question_type", "open") == "mcq":
+        correct = (question.correct_answer or "").strip().casefold()
+        chosen = (student_answer or "").strip().casefold()
+        is_correct = bool(chosen) and chosen == correct
+        explanation = (
+            "Correct." if is_correct
+            else f"The correct answer is: {question.correct_answer}."
+        )
+        return QuestionResult(
+            question_id=question.question_id,
+            question=question.question,
+            student_answer=student_answer,
+            is_correct=is_correct,
+            explanation=explanation,
+            source_chunk=chunk_content,
+        )
+
+    # sends one (open-ended) question to the LLM and gets back structured feedback
 
     system_prompt = """
     You are an exam corrector agent. 

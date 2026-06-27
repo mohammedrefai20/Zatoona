@@ -32,6 +32,7 @@ def run_exam_pipeline(
     topics: list[str],
     num_questions: int | None = None,
     difficult: bool = False,
+    question_type: str = "open",
 ) -> ExamObject:
     """Run the full exam creation pipeline and return a validated ExamObject.
 
@@ -47,6 +48,7 @@ def run_exam_pipeline(
         "topics": topics,
         "num_questions": num_questions,
         "difficult": difficult,
+        "question_type": question_type,
         "chunks": [],
         "exam": None,
         "validation": None,

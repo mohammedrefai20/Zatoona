@@ -6,23 +6,25 @@ from schemas.exam_object import ExamObject
 #exam_saving
 
 def save_exam(session_id: str, exam: ExamObject) -> None:
+    """Persist a new exam for this session. Each call is a new history entry."""
     db = SessionLocal()
     try:
-        row = db.query(StoredExam).filter(StoredExam.session_id == session_id).first()
-        payload = exam.model_dump_json()
-        if row:
-            row.exam_data = payload
-        else:
-            db.add(StoredExam(session_id=session_id, exam_data=payload))
+        db.add(StoredExam(session_id=session_id, exam_data=exam.model_dump_json()))
         db.commit()
     finally:
         db.close()
 
 
 def load_exam(session_id: str) -> ExamObject | None:
+    """Load the most recently generated exam for a session (for grading)."""
     db = SessionLocal()
     try:
-        row = db.query(StoredExam).filter(StoredExam.session_id == session_id).first()
+        row = (
+            db.query(StoredExam)
+            .filter(StoredExam.session_id == session_id)
+            .order_by(StoredExam.exam_id.desc())
+            .first()
+        )
         if row is None:
             return None
         return ExamObject(**json.loads(row.exam_data))
@@ -44,6 +46,8 @@ def _serialize_stored_exam(row: StoredExam) -> dict:
                 "question_id": q.question_id,
                 "topic": q.topic,
                 "question": q.question,
+                "question_type": q.question_type,
+                "options": q.options,
             }
             for q in exam.questions
         ],

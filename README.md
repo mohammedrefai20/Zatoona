@@ -1,482 +1,358 @@
-# 📚 Leo Agent — Classroom Exam Agent
+<div align="center">
 
-An end-to-end multi-agent system that transforms a student's raw study material into a personalized, validated exam — then grades the student's answers and returns structured, encouraging feedback.
+<img src="Zatoona.png" width="170" alt="Zatoona logo" />
 
-Built by a team of 6 as part of an Agentic AI course project.
+# Zatoona 🫒
 
----
+**Agentic, notes-grounded exam generator & grader** — study smart, ace it with less.
 
-## 🧠 What It Does
+*Turn your own study material into a fair, validated exam, take it, and get honest, encouraging feedback — every question grounded strictly in your notes.*
 
-```
-Student uploads notes (PDF, slides, audio, video, YouTube, Notion...)
-        │
-        ▼
-Notes are parsed, chunked, embedded, and stored in a local vector database
-        │
-        ▼
-An exam is generated from the notes and validated for accuracy
-        │
-        ▼
-The student answers the exam through a clean UI
-        │
-        ▼
-Answers are graded by an AI corrector that references the original notes
-        │
-        ▼
-Student receives a detailed feedback report with explanations and encouragement
-```
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-FastMCP-6E56CF?style=flat&logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6B6B?style=flat&logoColor=white)
+![Postgres](https://img.shields.io/badge/Postgres-4169E1?style=flat&logo=postgresql&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=flat)
+
+[Overview](#-overview) · [Architecture](#-system-architecture) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [API](#-api-reference) · [Tech stack](#-technology-stack)
+
+</div>
 
 ---
 
-## 🏗️ System Architecture
+> [!NOTE]
+> **Zatoona** is Arabic for *olive* — the briefest, smartest summary of a subject. The kind of revision that earns an A+ from a fraction of the effort. This project is that idea as software: study *smart*, not *hard*.
 
-The system is composed of three layers, each built by a dedicated sub-team and connected through shared schemas and a single MCP gateway.
+---
 
+## 🎯 Overview
+
+Zatoona is an end-to-end multi-agent system that transforms a student's raw study material into a personalized, validated exam — then grades the student's answers and returns structured, encouraging feedback.
+
+A student uploads notes in almost any format. The material is parsed, chunked, embedded, and stored in a per-session vector database. A self-correcting LangGraph pipeline generates exam questions grounded **strictly** in those notes and validates each one. The student answers through a polished web UI, and a corrector agent grades each answer against the original source chunk — explaining mistakes and flagging topics to review.
+
+The system is two cooperating codebases:
+
+| Component | Stack | Role |
+|-----------|-------|------|
+| **`Leo-Agent/`** — backend | Python · FastAPI · LangChain/LangGraph · MCP · ChromaDB · Postgres | Ingestion, retrieval, exam generation, grading, auth, REST API behind an nginx gateway |
+| **`zatoona-web/`** — frontend | React · Vite · TypeScript · Tailwind v4 · motion | The student-facing web app (landing, auth, upload, exam, results, history) |
+
+---
+
+## 🏗 System Architecture
+
+Everything reaches the backend through a single **nginx gateway** on port 80. Auth is JWT; the main service orchestrates three layers, all of which read note chunks through one **MCP server** — no layer touches ChromaDB directly.
+
+```mermaid
+flowchart TD
+    U([👩‍🎓 Student]):::pill --> FE[Zatoona Web<br/>React · Vite · Tailwind]:::fe
+    FE -->|JWT · REST| GW[nginx API gateway · :80]:::io
+    GW --> AUTH[Auth service<br/>FastAPI · JWT]:::io
+    GW --> API[Main service<br/>FastAPI]:::io
+    AUTH --> PG[(Postgres<br/>users · stored_exams)]:::db
+    API --> PG
+
+    API --> L2[Layer 2 · Exam creation<br/>LangGraph: generate ⇄ validate]:::dl
+    API --> L3[Layer 3 · Grading & feedback<br/>corrector agent · Groq]:::dl
+
+    subgraph L1 [Layer 1 · Ingestion & Retrieval]
+        direction LR
+        ING[Parse · chunk · embed]:::ml --> CH[(ChromaDB<br/>per-session)]:::db
+        MCP{{MCP server<br/>get_relevant_chunks}}:::mcp
+        CH --- MCP
+    end
+
+    API --> ING
+    L2 -.->|chunks| MCP
+    L3 -.->|chunks| MCP
+
+    classDef pill fill:#efe7ec,stroke:#888,color:#3a1f37
+    classDef fe fill:#efe2ee,stroke:#7c3aed,color:#3a1f37
+    classDef io fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef ml fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef dl fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    classDef db fill:#fdf0d5,stroke:#d2a23f,color:#5a3e0a
+    classDef mcp fill:#3a1f37,stroke:#3a1f37,color:#fff
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        STUDENT                              │
-│         Uploads notes + topics via UI                       │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              LAYER 1 — INFRASTRUCTURE                       │
-│                                                             │
-│  Raw input (PDF, DOCX, audio, video, YouTube, Notion...)    │
-│       │                                                     │
-│       ▼                                                     │
-│  Parse → Chunk → Embed → Store in ChromaDB (per session)    │
-│                              │                              │
-│                        MCP Server                           │
-│                  (single gateway for all agents)            │
-│                              │                              │
-│   Tools exposed:                                            │
-│     get_relevant_chunks(topic) → NoteChunk[]                │
-│     get_chunk_by_id(chunk_id)  → NoteChunk                  │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-              ┌───────────────┴────────────────┐
-              │                                │
-              ▼                                ▼
-┌─────────────────────────┐      ┌─────────────────────────────┐
-│  LAYER 2 — EXAM         │      │  LAYER 3 — GRADING          │
-│  CREATION (LangGraph)   │      │  & FEEDBACK                 │
-│                         │      │                             │
-│  fetch_chunks node      │      │  Student submits answers    │
-│       │                 │      │       │                     │
-│       ▼                 │      │       ▼                     │
-│  Generator Agent        │      │  Corrector Agent            │
-│  (drafts exam)          │      │  grades each answer         │
-│       │                 │      │  pulls source chunk         │
-│       ▼                 │      │  explains mistakes          │
-│  Validator Agent ───────┤      │       │                     │
-│  (checks grounding)     │      │       ▼                     │
-│       │                 │      │  Feedback Report            │
-│  ┌────┴────┐            │      │  score + per-question       │
-│  │         │            │      │  feedback + encouragement   │
-│ REJECT  APPROVE─────────┼──────►  passed to UI              │
-│  │                      │      └─────────────────────────────┘
-│  └──► loop back         │
-│       to generator      │
-└─────────────────────────┘
+
+### Frontend journey
+
+```mermaid
+flowchart LR
+    LP[Landing] --> LG[Login / Sign up]:::fe --> D[Study desk<br/>upload notes]:::fe --> G[Generate exam]:::fe --> E[Take exam]:::fe --> R[Graded results]:::fe --> H[History]:::fe
+    classDef fe fill:#efe2ee,stroke:#7c3aed,color:#3a1f37
 ```
 
 ---
 
-## ⚙️ Layer 1 — Notes Ingestion & Retrieval
+## 🔬 How it works
 
-Accepts virtually any input format and turns it into a searchable, session-isolated vector store. The MCP server is the **only** gateway — no other layer touches ChromaDB directly.
+<details open>
+<summary><b>Layer 2 — Exam creation (self-correcting LangGraph loop)</b></summary>
 
-### Supported Input Types
+<br/>
 
-```
-Files      → PDF, DOCX, PPTX, MD, HTML, images (OCR for scans)
-Audio/Video→ MP3, MP4, WAV (transcribed via faster-whisper or Groq ASR)
-YouTube    → auto-captions, playlist enumeration, audio fallback
-Notion     → page payload normalized to markdown
-Web        → opt-in enrichment via web search (off by default)
-Plain text → direct ingest
-```
+A LangGraph state machine fetches the relevant chunks, drafts questions, and validates each one against its source chunk. Rejected questions are regenerated with feedback (approved ones are kept by a programmatic merge), looping up to 3 times until every question is grounded.
 
-### Ingestion Pipeline
+```mermaid
+flowchart TD
+    S([POST /generate-exam]) --> FC[fetch_chunks<br/>via MCP per topic]:::io
+    FC --> G[Generator agent<br/>Lightning AI · structured output]:::dl
+    G --> V[Validator agent<br/>grounding check per question]:::dl
+    V -->|all valid| E([✅ validated ExamObject]):::pill
+    V -->|some rejected| G
+    V -.->|max 3 iterations| E
 
-```
-Raw input
-    │
-    ├── Document (PDF/DOCX/PPTX/image)
-    │       │
-    │       └── Docling parser (OCR if scanned)
-    │               │
-    │               └── HybridChunker (structure-aware)
-    │
-    ├── Audio / Video
-    │       │
-    │       └── faster-whisper / Groq ASR → transcript
-    │               │
-    │               └── Token splitter (with overlap)
-    │
-    ├── YouTube URL
-    │       │
-    │       └── Captions → transcript → token splitter
-    │
-    └── Text / Notion / Web
-            │
-            └── Direct text → token splitter
-                    │
-                    ▼
-            Embed (OpenAI / local sentence-transformers)
-                    │
-                    ▼
-            Store in ChromaDB (session-isolated collection)
+    classDef pill fill:#efe7ec,stroke:#888,color:#3a1f37
+    classDef io fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef dl fill:#ede9fe,stroke:#7c3aed,color:#3b0764
 ```
 
-### Retrieval Pipeline
+</details>
 
-```
-get_relevant_chunks(topic)
-    │
-    ├── Dense vector search     ← catches semantic meaning
-    ├── BM25 keyword search     ← catches exact terms, names, codes
-    ├── RRF fusion              ← merges both rankings
-    └── Cross-encoder rerank    ← precision pass
-            │
-            ▼
-    Top-K NoteChunk[] returned to caller
-```
+<details>
+<summary><b>Layer 3 — Grading & feedback</b></summary>
 
-### Session Isolation
+<br/>
 
-Each `SESSION_ID` maps to its own ChromaDB directory and client. Two sessions can never see or overwrite each other. `SESSION_RESET_ON_START=true` clears only the bound session on startup.
+The corrector agent grades each answer by re-fetching the question's source chunk, explains mistakes from the notes, and produces an encouraging report.
 
-### NoteChunk — The Cross-Layer Contract
+```mermaid
+flowchart TD
+    A([POST /submit-answer]) --> C[Corrector agent · Groq]:::dl
+    C -->|per question| SRC[pull source chunk by id · MCP]:::io
+    SRC --> GR[grade · explain · flag topic]:::dl
+    GR --> R([Feedback report<br/>score · topics_to_review · per-question feedback · encouragement]):::pill
 
-```python
-class NoteChunk(BaseModel):
-    chunk_id   : str
-    topic      : str
-    content    : str
-    session_id : str
+    classDef pill fill:#efe7ec,stroke:#888,color:#3a1f37
+    classDef io fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef dl fill:#ede9fe,stroke:#7c3aed,color:#3b0764
 ```
 
-Page numbers, slide numbers, headings, and timestamps are kept as internal metadata only and never exposed outside Layer 1.
+</details>
+
+<details>
+<summary><b>Layer 1 — Ingestion & hybrid retrieval</b></summary>
+
+<br/>
+
+Almost any source becomes a searchable, **session-isolated** vector store. Each `session_id` maps to its own ChromaDB collection, so users never see each other's material.
+
+```mermaid
+flowchart TD
+    IN[PDF · DOCX · PPTX · image · audio/video · YouTube · text] --> P{source type}
+    P -->|document| DOC[Docling parse<br/>OCR if scanned]
+    P -->|audio/video| ASR[faster-whisper / Groq ASR]
+    P -->|youtube| YT[captions → transcript]
+    P -->|text/notion| TXT[direct]
+    DOC --> CK[structure-aware chunking]
+    ASR --> CK
+    YT --> CK
+    TXT --> CK
+    CK --> EMB[embed · OpenAI / MiniLM auto-fallback]
+    EMB --> CH[(ChromaDB · session-isolated)]
+```
+
+Retrieval is hybrid: dense vectors catch meaning, BM25 catches exact terms, RRF fuses them, and a cross-encoder reranks for precision.
+
+```mermaid
+flowchart LR
+    Q[topic query] --> DENSE[dense vector search]
+    Q --> BM[BM25 keyword search]
+    DENSE --> RRF[RRF fusion]
+    BM --> RRF
+    RRF --> RR[cross-encoder rerank]
+    RR --> TOPK[top-K NoteChunk\[\]]
+```
+
+</details>
 
 ---
 
-## ⚙️ Layer 2 — Exam Creation (LangGraph)
+## 🚀 Quick start
 
-A self-correcting agentic pipeline that generates exam questions grounded strictly in the student's notes and loops until all questions pass validation.
+You need **Docker** (backend) and **Node 20+** (frontend).
 
-### Pipeline Flow
+### 1 · Backend
 
-```
-                    ┌──────────────────────────────────┐
-                    │      LANGGRAPH STATE MACHINE      │
-                    └───────────┬──────────────────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   fetch_chunks node   │
-                    │   calls MCP server    │
-                    │   per topic           │
-                    └───────────┬───────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   Generator Agent     │
-                    │                       │
-                    │   input:              │
-                    │     topics list       │
-                    │     note chunks       │
-                    │     retry feedback    │
-                    │                       │
-                    │   output:             │
-                    │     ExamObject(draft) │
-                    └───────────┬───────────┘
-                                │
-                                ▼
-                    ┌───────────────────────┐
-                    │   Validator Agent     │
-                    │                       │
-                    │   checks each question│
-                    │   is grounded in      │
-                    │   referenced chunk    │
-                    └───────────┬───────────┘
-                                │
-               ┌────────────────┴──────────────┐
-               │                               │
-           REJECT                          APPROVE
-    (invalid questions)              (all questions valid)
-               │                               │
-               ▼                               ▼
-    loop back to generator            ExamObject(validated)
-    with rejection feedback           passed to Layer 3
-    (max 3 iterations)
+```bash
+cd Leo-Agent
+# create the three env files (see Configuration below), then:
+docker compose up --build
+curl http://localhost/health     # {"status":"UP", ...}
 ```
 
-### ExamObject Schema
+The gateway comes up on **http://localhost** (port 80). First run downloads embedding/reranker/OCR models, so give it a few minutes.
+
+### 2 · Frontend
+
+```bash
+cd zatoona-web
+npm install
+npm run dev                      # http://localhost:5173
+```
+
+In dev, Vite proxies all API paths to the gateway server-side (no CORS, no preflight). Open **http://localhost:5173** and sign up.
+
+<div align="center">
+<br/>
+<!-- Drop a screen recording at assets/demo.gif and it renders here -->
+<img src="assets/demo.gif" width="720" alt="Zatoona demo" />
+<br/><sub>📽️ add <code>assets/demo.gif</code> to show the flow: upload → generate → take → graded results</sub>
+</div>
+
+---
+
+## 💻 Frontend (`zatoona-web`)
+
+A polished SPA built around the brand's aubergine olive mascot.
+
+- **Public landing** at `/`, app behind login at `/app` (study desk · exam · results · history).
+- **Dark mode** (class-based, no-flash, remembered), **staged loaders** that show named phases during the multi-minute uploads/generation so the wait never looks frozen, and a mascot that reacts to each state.
+- **Per-user isolation** of all study state (topics/exam/report are namespaced per account; nothing leaks across users on a shared browser).
+
+See [`zatoona-web/README.md`](zatoona-web/README.md) for component structure and build details.
+
+---
+
+## 🛠 Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Agent framework | ![LangChain](https://img.shields.io/badge/-LangChain-1C3C3C?logo=langchain&logoColor=white) |
+| Orchestration | ![LangGraph](https://img.shields.io/badge/-LangGraph-1C3C3C?logo=langchain&logoColor=white) |
+| Agent gateway | ![MCP](https://img.shields.io/badge/-MCP_·_FastMCP-6E56CF?logoColor=white) |
+| API server | ![FastAPI](https://img.shields.io/badge/-FastAPI-009688?logo=fastapi&logoColor=white) ![nginx](https://img.shields.io/badge/-nginx-009639?logo=nginx&logoColor=white) |
+| Vector store | ![ChromaDB](https://img.shields.io/badge/-ChromaDB-FF6B6B?logoColor=white) |
+| Relational DB | ![Postgres](https://img.shields.io/badge/-Postgres-4169E1?logo=postgresql&logoColor=white) |
+| Embeddings | ![OpenAI](https://img.shields.io/badge/-OpenAI-412991?logo=openai&logoColor=white) ![Sentence Transformers](https://img.shields.io/badge/-Sentence_Transformers-blue?logoColor=white) |
+| Exam-gen LLM | ![Lightning AI](https://img.shields.io/badge/-Lightning_AI-792EE5?logoColor=white) |
+| Grading LLM | ![Groq](https://img.shields.io/badge/-Groq-F55036?logoColor=white) |
+| Doc parsing | ![Docling](https://img.shields.io/badge/-Docling-4B8BBE?logoColor=white) |
+| Transcription | ![faster-whisper](https://img.shields.io/badge/-faster--whisper-FFB000?logoColor=white) |
+| Validation | ![Pydantic](https://img.shields.io/badge/-Pydantic-E92063?logo=pydantic&logoColor=white) |
+| Frontend | ![React](https://img.shields.io/badge/-React-61DAFB?logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/-Vite-646CFF?logo=vite&logoColor=white) ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?logo=typescript&logoColor=white) ![Tailwind](https://img.shields.io/badge/-Tailwind-06B6D4?logo=tailwindcss&logoColor=white) |
+| Containerization | ![Docker](https://img.shields.io/badge/-Docker-2496ED?logo=docker&logoColor=white) |
+| Tracing | ![LangSmith](https://img.shields.io/badge/-LangSmith-1C3C3C?logoColor=white) |
+
+---
+
+## 🔌 API Reference
+
+Base URL **`http://localhost`**. Auth header: `Authorization: Bearer <access_token>`.
+
+| Step | Method | Path | Auth | Body |
+|------|--------|------|------|------|
+| Sign up | `POST` | `/auth/signup` | — | form: `username`, `email`, `password` |
+| Login | `POST` | `/auth/login` | — | form: `username`, `password` |
+| Refresh | `POST` | `/auth/refresh` | — | JSON: `refresh_token` |
+| Logout | `POST` | `/auth/logout` | ✅ | form: `refresh_token` (optional) |
+| Health | `GET` | `/health` | — | — |
+| Upload notes | `POST` | `/upload/` | ✅ | multipart: `topic` + one of `file` / `url` / `text` |
+| Generate exam | `POST` | `/generate-exam/` | ✅ | JSON: `topics`, `num_questions`, `difficult` |
+| Submit answers | `POST` | `/submit-answer/` | ✅ | JSON: `answers[]` |
+| Exam history | `GET` | `/history/` | ✅ | — |
+| Get exam | `GET` | `/get-exam/{exam_id}` | ✅ | — |
+
+Full request/response shapes and Streamlit/JS examples live in [`api-doc.md`](api-doc.md).
+
+### Core schemas
 
 ```python
 class Question(BaseModel):
-    question_id     : str
-    topic           : str
-    question        : str
-    correct_answer  : str
-    source_chunk_id : str   # direct reference to the note chunk
+    question_id: str
+    topic: str
+    question: str
+    correct_answer: str      # never exposed to the student
+    source_chunk_id: str     # traceability to the note chunk
 
 class ExamObject(BaseModel):
-    session_id : str
-    topics     : list[str]
-    status     : Literal["draft", "validated"]
-    questions  : list[Question]
+    session_id: str
+    topics: list[str]
+    status: Literal["draft", "validated"]
+    questions: list[Question]
+
+class FeedbackReport(BaseModel):
+    session_id: str
+    score: int
+    topics_to_review: list[str]
+    encouragement: str
+    results: list[QuestionResult]   # per-question: is_correct, explanation, source_chunk
 ```
-
-### Key Features
-
-- Questions are grounded **strictly** in the student's own notes — no external knowledge
-- Supports `--difficult` mode: questions synthesize information across multiple chunks
-- Self-correction loop replaces only the rejected questions, keeping approved ones
-- `--num-questions` controls question count; capped at available chunks if exceeded
 
 ---
 
-## ⚙️ Layer 3 — Grading & Feedback
+## ⚙️ Configuration
 
-Receives the validated exam and student answers, grades each answer by referencing the original note chunk, and returns a structured feedback report.
+Three env files are read before the first `docker compose up`:
 
-### Grading Flow
+| File | Contains |
+|------|----------|
+| `Database/.env` | Postgres user / password / db |
+| `Authentication/.env` | `SECRET_KEY`, token lifetimes |
+| `.env` | `GROQ_API_KEY`, `LIGHTNING_API_KEY`, `OPENAI_API_KEY`, optional `LANGSMITH_*` for tracing |
 
-```
-Validated exam + student answers
-        │
-        ▼
-┌───────────────────────────────┐
-│      Corrector Agent          │
-│                               │
-│  for each question:           │
-│    get source chunk by ID     │
-│    from MCP server            │
-│         │                     │
-│         ▼                     │
-│    grade answer (LLM)         │
-│    if wrong:                  │
-│      explain using notes      │
-│      flag topic for review    │
-│                               │
-│  generate encouragement msg   │
-└───────────────┬───────────────┘
-                │
-                ▼
-┌───────────────────────────────┐
-│       Feedback Report         │
-│                               │
-│  score          e.g. 7/10     │
-│  topics_to_review  [...]      │
-│  encouragement  "..."         │
-│  results[]                    │
-│    question                   │
-│    student_answer             │
-│    is_correct                 │
-│    explanation                │
-│    source_chunk               │
-└───────────────────────────────┘
-```
+Key knobs (see `config/settings.py` for the full list):
 
-### UI Flow (Streamlit)
+| Key | Default | Description |
+|-----|---------|-------------|
+| `EMBEDDING_PROVIDER` | `auto` | `openai` / `local` / `auto` |
+| `RETRIEVAL_MODE` | `hybrid` | `hybrid` or `dense` |
+| `RERANK_ENABLED` | `true` | cross-encoder reranking |
+| `MAX_VALIDATION_ITERATIONS` | `3` | exam self-correction loops |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | grading model |
+| `SESSION_RESET_ON_START` | `false` | clears the bound session's chunks on startup |
 
-```
-Page 1 — Exam
-  Student sees questions → types answers → submits
-
-Page 2 — Grading
-  Spinner shown while corrector agent runs
-
-Page 3 — Feedback Report
-  Score + progress bar
-  Encouragement message
-  Topics to review
-  Per-question expandable cards (✅ correct / ❌ wrong + explanation)
-  Option to start a new exam
-```
+**Observability.** With `LANGSMITH_*` set, all generator/validator/corrector LLM calls are traced to LangSmith automatically.
 
 ---
 
 ## 📁 Project Structure
 
 ```
-Leo-Agent/
-│
-├── .env                        # API keys and config (never commit)
-├── .env.example                # Template — fill and rename to .env
-├── requirements.txt            # All dependencies
-├── main.py                     # Entry point — starts MCP server + UI
-│
-├── config/
-│   └── settings.py             # Loads .env and exposes all config constants
-│
-├── agents/
-│   ├── generator_agent.py      # Generates exam questions from note chunks
-│   ├── validator_agent.py      # Validates questions are grounded in notes
-│   ├── corrector_agent.py      # Grades answers and generates feedback
-│   ├── exam_loader.py          # Loads exam (mock or real pipeline)
-│   └── answer_loader.py        # Loads student answers (mock or real UI)
-│
-├── graph/
-│   ├── exam_graph.py           # LangGraph state machine + run_exam_pipeline()
-│   ├── nodes.py                # fetch_chunks, generate, validate nodes
-│   ├── edges.py                # Conditional routing (approve vs reject)
-│   └── state.py                # ExamState TypedDict
-│
-├── mcp_server/
-│   ├── server.py               # FastMCP app + start_mcp_server()
-│   ├── mcp_client.py           # Client used by Layer 3 to call MCP tools
-│   └── tools/
-│       └── retrieval_tool.py   # get_relevant_chunks(), get_chunk_by_id()
-│
-├── schemas/
-│   ├── note_chunk.py           # NoteChunk — cross-layer contract
-│   ├── exam_object.py          # ExamObject, Question, ValidationResult
-│   └── feedback_report.py      # FeedbackReport, QuestionResult
-│
-├── vector_db/
-│   ├── ingestion.py            # Router: file/url/text → parse → chunk → store
-│   ├── docling_parser.py       # PDF/DOCX/PPTX/images → structured document
-│   ├── chunking.py             # HybridChunker / semantic chunking
-│   ├── embedder.py             # OpenAI / local embeddings (auto fallback)
-│   ├── chroma_client.py        # Per-session ChromaDB client
-│   ├── retriever.py            # Hybrid search (dense + BM25 + RRF + rerank)
-│   ├── loaders.py              # Audio/video transcription
-│   ├── youtube.py              # YouTube captions + playlist + audio fallback
-│   ├── notion.py               # Notion page → markdown
-│   └── enrichment.py          # Opt-in web enrichment
-│
-├── ui/
-│   └── app.py                  # Streamlit UI (3 pages: exam, loading, report)
-│
-├── utils/
-│   └── report_writer.py        # Save and print feedback reports
-│
-├── outputs/
-│   └── report_<session>.json   # Generated feedback reports
-│
-└── tests/
-    ├── team_a/                 # Ingestion, retrieval, MCP server tests
-    ├── team_b/                 # Generator, validator, graph tests
-    └── team_c/                 # Corrector agent tests + mock data
+.
+├── Leo-Agent/                  # backend (FastAPI · LangGraph · MCP · ChromaDB)
+│   ├── app.py                  # main service: upload, generate-exam, submit-answer, history
+│   ├── agents/                 # generator · validator · corrector
+│   ├── graph/                  # LangGraph state machine (nodes · edges · state)
+│   ├── mcp_server/             # MCP gateway + retrieval tools
+│   ├── vector_db/              # ingestion · chunking · embeddings · hybrid retriever
+│   ├── Authentication/         # JWT auth · SQLAlchemy models
+│   ├── nginx/                  # API gateway config
+│   └── docker-compose.yml
+├── zatoona-web/                # frontend (React · Vite · Tailwind)
+├── api-doc.md                  # REST contract + examples
+└── Zatoona.png                 # the mascot
 ```
 
 ---
 
-## 🚀 Setup & Running
+## ⚠️ Limitations & 🔭 Future Work
 
-### 1. Clone and create virtual environment
-
-```bash
-git clone https://github.com/your-team/leo-agent.git
-cd leo-agent
-python -m venv envs/agentic
-envs\agentic\Scripts\activate   # Windows
-source envs/agentic/bin/activate # Mac/Linux
-```
-
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# open .env and fill in your API keys
-```
-
-Required keys:
-
-```
-OPENAI_API_KEY=...        # for embeddings (Layer 1)
-LIGHTNING_API_KEY=...     # for exam generation (Layer 2)
-GROQ_API_KEY=...          # for grading (Layer 3)
-```
-
-### 4. Run the full system
-
-```bash
-python main.py
-```
-
-This starts the MCP server in the background and launches the Streamlit UI at `http://localhost:8501`.
-
-### 5. Run individual layers
-
-```bash
-# Layer 1 — MCP server only
-python -m mcp_server.server
-
-# Layer 2 — Exam pipeline CLI
-python main.py --session my-session --topics "World War 2,French Revolution"
-
-# Layer 3 — Corrector test
-python -m tests.team_c.test_corrector_agent
-
-# UI only
-streamlit run ui/app.py
-```
+- **Questions are open-text today.** MCQ support is on the roadmap.
+- **Topic naming is manual.** An agent that auto-titles uploaded material from its content is planned.
+- **Web enrichment** exists in `vector_db/enrichment.py` but is not yet wired end-to-end.
+- Exam generation is synchronous (no live progress stream); the frontend simulates staged progress.
+- Retrieval quality is bounded by the quality of the uploaded material.
 
 ---
 
-## 🔧 Configuration
+## 👥 Team
 
-| Key | Default | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | — | OpenAI key for embeddings |
-| `EMBEDDING_PROVIDER` | `auto` | `openai` / `local` / `auto` |
-| `LOCAL_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Fallback embedding model |
-| `CHROMA_PERSIST_DIR` | `./chroma_db` | Vector DB storage path |
-| `SESSION_ID` | `default` | Isolates each student session |
-| `SESSION_RESET_ON_START` | `true` | Clears session on startup |
-| `RETRIEVAL_MODE` | `hybrid` | `hybrid` or `dense` |
-| `RETRIEVAL_TOP_K` | `5` | Chunks returned per query |
-| `RERANK_ENABLED` | `true` | Cross-encoder reranking |
-| `LIGHTNING_API_KEY` | — | Lightning AI key for exam generation |
-| `MODEL_NAME` | — | LLM model for exam generation |
-| `MAX_VALIDATION_ITERATIONS` | `3` | Max self-correction loops |
-| `GROQ_API_KEY` | — | Groq key for answer grading |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model for grading |
-| `USE_REAL_MCP` | `false` | Switch to real MCP server |
-| `USE_REAL_EXAM` | `false` | Switch to real exam pipeline |
-| `UI_PORT` | `8501` | Streamlit port |
+Built as an Agentic AI course capstone.
 
----
+| — | — | — | — | — | — |
+|:-:|:-:|:-:|:-:|:-:|:-:|
+| · | · | · | · | · | · |
 
-## 🤝 Contributors
-
-This project was built by a team of 6 as part of an Agentic AI course:
-
-| Contributor | GitHub |
-|---|---|
-| — | — |
-| — | — |
-| — | — |
-| — | — |
-| — | — |
-| — | — |
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Agent framework | LangChain |
-| Orchestration | LangGraph |
-| Agent communication | MCP (FastMCP) |
-| Vector storage | ChromaDB |
-| Embeddings | OpenAI / sentence-transformers |
-| Exam generation LLM | Lightning AI |
-| Grading LLM | Groq (llama-3.3-70b-versatile) |
-| Document parsing | Docling |
-| Audio transcription | faster-whisper / Groq ASR |
-| UI | Streamlit |
-| Validation | Pydantic |
+<div align="center">
+<br/>
+<sub>🫒 Zatoona · study smart, ace it with less.</sub>
+</div>

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from Authentication.database import Base
@@ -18,7 +18,7 @@ class User(Base):
     created_at = Column(Date, default=date.today, nullable=False)
     session_id = Column(String, unique=True, index=True, nullable=False)
     refresh_tokens = relationship("RefreshToken", back_populates="user")
-    stored_exams = relationship("StoredExam", back_populates="user", uselist=False)
+    stored_exams = relationship("StoredExam", back_populates="user")
 
 
 class RefreshToken(Base):
@@ -36,8 +36,12 @@ class RefreshToken(Base):
 class StoredExam(Base):
     __tablename__ = "stored_exams"
 
-    session_id = Column(String, ForeignKey("users.session_id"), primary_key=True)
-    exam_id = Column(BigInteger, autoincrement=True, unique=True, index=True, nullable=False)
+    # exam_id is the autoincrement PK (autoincrement only works on the PK).
+    # BigInteger->BIGSERIAL on Postgres; variant to INTEGER on SQLite so its
+    # rowid-alias autoincrement kicks in (SQLite only auto-increments INTEGER PKs).
+    # session_id is a plain indexed FK so a user can have many exams (history).
+    exam_id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    session_id = Column(String, ForeignKey("users.session_id"), index=True, nullable=False)
     exam_data = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

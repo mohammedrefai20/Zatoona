@@ -7,6 +7,8 @@ class Question(BaseModel):
     question_id: str
     topic: str
     question: str
+    question_type: Literal["open", "mcq"] = "open"  # default keeps old exams valid
+    options: list[str] | None = None                # only set for mcq
     correct_answer: str
     source_chunk_id: str
 

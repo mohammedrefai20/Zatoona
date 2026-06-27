@@ -13,3 +13,6 @@ envs
 *.egg-info
 .venv
 venv
+
+# frontend lives in this repo but is not part of the backend image
+zatoona-web

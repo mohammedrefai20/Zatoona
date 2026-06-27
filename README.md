@@ -346,11 +346,10 @@ Key knobs (see `config/settings.py` for the full list):
 
 ## 👥 Team
 
-Built as an Agentic AI course capstone.
 
-| — | — | — | — | — | — |
-|:-:|:-:|:-:|:-:|:-:|:-:|
-| · | · | · | · | · | · |
+| Mazen Mohamed | Mahmoud Elgendy | Mohamed Emad | Mohamed Magdy | Mohamed Refai | Ziad Mahmoud |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/Mazen149) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/rklorD456) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/3omdawy11) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/mohamedmagdy9977) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/mohammedrefai20) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/ZeyadMahmoudAmrMohamed) |
 
 <div align="center">
 <br/>

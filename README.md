@@ -203,7 +203,6 @@ In dev, Vite proxies all API paths to the gateway server-side (no CORS, no prefl
 
 <div align="center">
 <br/>
-<!-- Drop a screen recording at assets/demo.gif and it renders here -->
 <img src="assets/demo.gif" width="720" alt="Zatoona demo" />
 <br/><sub>📽️ add <code>assets/demo.gif</code> to show the flow: upload → generate → take → graded results</sub>
 </div>
@@ -336,21 +335,18 @@ Key knobs (see `config/settings.py` for the full list):
 
 ## ⚠️ Limitations & 🔭 Future Work
 
-- **Questions are open-text today.** MCQ support is on the roadmap.
-- **Topic naming is manual.** An agent that auto-titles uploaded material from its content is planned.
-- **Web enrichment** exists in `vector_db/enrichment.py` but is not yet wired end-to-end.
-- Exam generation is synchronous (no live progress stream); the frontend simulates staged progress.
 - Retrieval quality is bounded by the quality of the uploaded material.
 
 ---
 
 ## 👥 Team
 
-Built as an Agentic AI course capstone.
 
-| — | — | — | — | — | — |
-|:-:|:-:|:-:|:-:|:-:|:-:|
-| · | · | · | · | · | · |
+
+| Mazen Mohamed | Mahmoud Elgendy | Mohamed Emad | Mohamed Magdy | Mohamed Refai | Ziad Mahmoud |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/Mazen149) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/rklorD456) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/3omdawy11) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/mohamedmagdy9977) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/mohammedrefai20) | [![GitHub](https://img.shields.io/badge/-GitHub-181717?logo=github)](https://github.com/ZeyadMahmoudAmrMohamed) |
+
 
 <div align="center">
 <br/>
